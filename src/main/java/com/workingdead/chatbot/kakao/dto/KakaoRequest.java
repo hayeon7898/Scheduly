@@ -99,16 +99,23 @@ public class KakaoRequest {
         private String name;
         private String id;
         private Map<String, String> params;
-        private Map<String, String> detailParams;
+        private Map<String, Object> detailParams;
         private Map<String, Object> clientExtra;
     }
 
     // 편의 메서드
     public String getUserKey() {
-        if (userRequest != null && userRequest.getUser() != null) {
-            return userRequest.getUser().getId();
+        if (userRequest == null || userRequest.getUser() == null) return null;
+
+        Properties p = userRequest.getUser().getProperties();
+        if (p != null) {
+            String plusfriendUserKey = p.getPlusfriendUserKey();
+            if (plusfriendUserKey != null && !plusfriendUserKey.isBlank()) {
+                return plusfriendUserKey;
+            }
         }
-        return null;
+        String id = userRequest.getUser().getId();
+        return (id == null || id.isBlank()) ? null : id;
     }
 
     public String getUtterance() {
@@ -119,9 +126,20 @@ public class KakaoRequest {
     }
 
     public String getParam(String key) {
+        if (key == null || key.isBlank()) return null;
+
+        // 1) action.params 우선
         if (action != null && action.getParams() != null) {
-            return action.getParams().get(key);
+            String v = action.getParams().get(key);
+            if (v != null) return v;
         }
+
+        // 2) userRequest.params fallback (오픈빌더 설정에 따라 여기로 들어오는 케이스 대비)
+        if (userRequest != null && userRequest.getParams() != null) {
+            Object v = userRequest.getParams().get(key);
+            return v == null ? null : String.valueOf(v);
+        }
+
         return null;
     }
 
@@ -150,11 +168,14 @@ public class KakaoRequest {
     }
 
     /**
-     * 사용자의 botUserKey 조회 (그룹챗에서 사용자 식별용)
+     * 그룹챗 사용자 식별용 botUserKey
+     * - PRD 기준: 멘션/참석자 식별 키로 사용
+     * - 현재 구조에서는 user.id를 사용
      */
     public String getBotUserKey() {
         if (userRequest != null && userRequest.getUser() != null) {
-            return userRequest.getUser().getId();
+            String id = userRequest.getUser().getId();
+            return (id == null || id.isBlank()) ? null : id;
         }
         return null;
     }

@@ -5,8 +5,7 @@ spring:
   datasource:
     url: jdbc:postgresql://workingdead.cri4yyouailh.ap-northeast-2.rds.amazonaws.com:5432/workingdead?sslmode=require
     username: postgres
-    password: ${DB_PASSWORD}
-    driver-class-name: org.postgresql.Driver
+    password: ${DB_PASSWORD:workingdead}
 
   jpa:
     hibernate:

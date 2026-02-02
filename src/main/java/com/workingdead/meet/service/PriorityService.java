@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workingdead.meet.dto.PriorityDtos.*;
 import com.workingdead.meet.entity.*;
 import com.workingdead.meet.repository.*;
-import org.springframework.data.redis.core.RedisTemplate;
+//import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
@@ -21,18 +21,18 @@ public class PriorityService {
     private final PriorityPreferenceRepository prefRepo;
     private final ParticipantRepository participantRepo;
     private final VoteRepository voteRepo;
-    private final RedisTemplate<String, String> redisTemplate;
+//    private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper om;
 
     public PriorityService(PriorityPreferenceRepository prefRepo,
                            ParticipantRepository participantRepo,
                            VoteRepository voteRepo,
-                           RedisTemplate<String, String> redisTemplate,
+//                           RedisTemplate<String, String> redisTemplate,
                            ObjectMapper om) {
         this.prefRepo = prefRepo;
         this.participantRepo = participantRepo;
         this.voteRepo = voteRepo;
-        this.redisTemplate = redisTemplate;
+//        this.redisTemplate = redisTemplate;
         this.om = om;
     }
 
@@ -143,22 +143,22 @@ public class PriorityService {
         } catch (JsonProcessingException e) {
             throw new RuntimeException("session serialization error", e);
         }
-    } else if ("redis".equals(finalStorage)) {
-        if (redisTemplate == null) {
-            throw new IllegalStateException("RedisTemplate bean is not configured");
-        }
-        
-        List<PriorityPreference> currentPrefs = new ArrayList<>(existing);
-        currentPrefs.removeAll(toDelete);
-        currentPrefs.addAll(toSave);
-        
-        try {
-            String key = "participant:" + participantId + ":priorities";
-            String json = om.writeValueAsString(currentPrefs.stream().map(this::toRes).collect(Collectors.toList()));
-            redisTemplate.opsForValue().set(key, json);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("redis serialization error", e);
-        }
+//    } else if ("redis".equals(finalStorage)) {
+//        if (redisTemplate == null) {
+//            throw new IllegalStateException("RedisTemplate bean is not configured");
+//        }
+//
+//        List<PriorityPreference> currentPrefs = new ArrayList<>(existing);
+//        currentPrefs.removeAll(toDelete);
+//        currentPrefs.addAll(toSave);
+//
+//        try {
+//            String key = "participant:" + participantId + ":priorities";
+//            String json = om.writeValueAsString(currentPrefs.stream().map(this::toRes).collect(Collectors.toList()));
+//            redisTemplate.opsForValue().set(key, json);
+//        } catch (JsonProcessingException e) {
+//            throw new RuntimeException("redis serialization error", e);
+//        }
     } else {
         throw new IllegalArgumentException("Unknown storage: " + storage);
     }

@@ -283,11 +283,14 @@ public class KakaoResponse {
     }
 
     /**
-     * 멘션이 포함된 텍스트 응답 생성
-     * text에 #{mentions.key} 형식으로 멘션 삽입
-     * 예: "#{mentions.user1}님, 투표해주세요!"
+     * 텍스트 + 퀵리플라이 + 멘션(extra.mentions) 응답 생성
+     * text에 #{mentions.key} 형식으로 멘션 삽입 가능
      */
-    public static KakaoResponse simpleTextWithMentions(String text, Map<String, String> mentions) {
+    public static KakaoResponse textWithQuickRepliesAndMentions(
+            String text,
+            Map<String, String> mentions,
+            List<QuickReply> quickReplies
+    ) {
         return KakaoResponse.builder()
                 .version("2.0")
                 .template(Template.builder()
@@ -296,8 +299,9 @@ public class KakaoResponse {
                                         .simpleText(SimpleText.builder().text(text).build())
                                         .build()
                         ))
+                        .quickReplies(quickReplies)
                         .build())
-                .extra(Extra.builder().mentions(mentions).build())
+                .extra((mentions == null || mentions.isEmpty()) ? null : Extra.builder().mentions(mentions).build())
                 .build();
     }
 
