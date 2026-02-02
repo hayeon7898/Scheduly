@@ -5,7 +5,7 @@ spring:
   datasource:
     url: jdbc:postgresql://workingdead.cri4yyouailh.ap-northeast-2.rds.amazonaws.com:5432/workingdead?sslmode=require
     username: postgres
-    password: ${DB_PASSWORD:workingdead}
+    password: ${DB_PASSWORD}
 
   jpa:
     hibernate:
@@ -68,7 +68,7 @@ discord:
   token: ${DISCORD_TOKEN}
 
 kakao:
-  rest-api-key: ${KAKAO_REST_API_KEY:f674ae4dedf0daa41c4ec632d76ebac0}
+  rest-api-key: ${KAKAO_REST_API_KEY}
   admin-key: ${KAKAO_ADMIN_KEY:}
   channel-id: ${KAKAO_CHANNEL_ID:}
   bot-id: ${KAKAO_BOT_ID:}
