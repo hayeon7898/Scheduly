@@ -24,6 +24,8 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
                         ).permitAll()
+                        // 카카오 스킬 서버 엔드포인트
+                        .requestMatchers("/kakao/skill/**").permitAll()
                         .anyRequest().permitAll()
                 );
 

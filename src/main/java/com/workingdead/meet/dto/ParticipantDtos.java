@@ -9,7 +9,7 @@ import java.util.List;
 public class ParticipantDtos {
     public record CreateParticipantReq(@NotBlank String displayName) {}
     public record UpdateParticipantReq(String displayName) {}
-    public record ParticipantRes(Long id, String displayName,boolean loggedIn // 로그인 상태
+    public record ParticipantRes(Long id, String displayName, boolean loggedIn // 로그인 상태
         ) {}
 
     // 단순 상태 조회용 DTO (투표 여부 판단 전용)

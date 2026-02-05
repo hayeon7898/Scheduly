@@ -1,6 +1,6 @@
 package com.workingdead.config;
 
-import com.workingdead.chatbot.command.WendyCommand;
+import com.workingdead.chatbot.discord.command.DiscordWendyCommand;
 import jakarta.annotation.PreDestroy;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -19,7 +19,7 @@ public class DiscordBotConfig {
     private JDA jda;
 
     @Bean
-    public JDA jda(WendyCommand wendyCommand) throws Exception {
+    public JDA jda(DiscordWendyCommand discordWendyCommand) throws Exception {
         jda = JDABuilder.createDefault(discordToken)
             .enableIntents(
                 GatewayIntent.GUILD_MESSAGES,
@@ -28,11 +28,11 @@ public class DiscordBotConfig {
                 GatewayIntent.GUILD_MEMBERS
             )
             .setMemberCachePolicy(MemberCachePolicy.ALL)
-            .addEventListeners(wendyCommand)
+            .addEventListeners(discordWendyCommand)
             .build()
             .awaitReady();
 
-        System.out.println("[Wendy Bot] Started! Server count: " + jda.getGuilds().size());
+        System.out.println("[Discord Wendy Bot] Started! Server count: " + jda.getGuilds().size());
         return jda;
     }
 
@@ -40,7 +40,7 @@ public class DiscordBotConfig {
     public void shutdown() {
         if (jda != null) {
             jda.shutdown();
-            System.out.println("[Wendy Bot] Shutdown");
+            System.out.println("[Discord Wendy Bot] Shutdown");
         }
     }
 }

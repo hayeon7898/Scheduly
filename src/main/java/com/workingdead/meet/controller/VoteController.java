@@ -25,6 +25,8 @@ public class VoteController {
                 this.participantRepository = participantRepository;
         }
 
+    @GetMapping("/hi")
+    public String hi(){ return "hi";}
 
     @Operation(
             summary = "투표 목록 조회",

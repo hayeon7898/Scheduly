@@ -6,7 +6,6 @@ spring:
     url: jdbc:postgresql://workingdead.cri4yyouailh.ap-northeast-2.rds.amazonaws.com:5432/workingdead?sslmode=require
     username: postgres
     password: ${DB_PASSWORD}
-    driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
@@ -32,7 +31,7 @@ spring:
         access-key: ${AWS_ACCESS_KEY_ID}
         secret-key: ${AWS_SECRET_ACCESS_KEY}
       s3:
-        bucket:    # ??: spring.cloud.aws.s3.bucket? ?? ?????? ?? app.s3.bucket ??
+        bucket:    # spring.cloud.aws.s3.bucket
         path-style-access-enabled: false
 
   logging:
@@ -67,3 +66,9 @@ springdoc:
 
 discord:
   token: ${DISCORD_TOKEN}
+
+kakao:
+  rest-api-key: ${KAKAO_REST_API_KEY}
+  admin-key: ${KAKAO_ADMIN_KEY:}
+  channel-id: ${KAKAO_CHANNEL_ID:}
+  bot-id: ${KAKAO_BOT_ID:}

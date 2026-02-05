@@ -1,8 +1,7 @@
 package com.workingdead.meet.application;
 
-import com.workingdead.chatbot.scheduler.WendyScheduler;
-import com.workingdead.chatbot.service.WendyNotifier;
-import com.workingdead.chatbot.service.WendyService;
+import com.workingdead.chatbot.discord.service.DiscordWendyNotifier;
+import com.workingdead.chatbot.discord.service.DiscordWendyService;
 import com.workingdead.meet.dto.ParticipantDtos.ParticipantScheduleRes;
 import com.workingdead.meet.dto.ParticipantDtos.SubmitScheduleReq;
 import com.workingdead.meet.service.ParticipantService;
@@ -17,8 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class VoteApplicationService {
 
     private final ParticipantService participantService;
-    private final WendyService wendyService;
-    private final WendyNotifier wendyNotifier;
+    private final DiscordWendyService discordWendyService;
+    private final DiscordWendyNotifier discordWendyNotifier;
     private final JDA jda;
 
     @Transactional
@@ -33,8 +32,8 @@ public class VoteApplicationService {
             return res;
         }
 
-        // 3) voteId -> channelId 매핑 (WendyService 관리)
-        String channelId = wendyService.getChannelIdByVoteId(voteId);
+        // 3) voteId -> channelId 매핑 (DiscordWendyService 관리)
+        String channelId = discordWendyService.getChannelIdByVoteId(voteId);
         if (channelId == null || channelId.isBlank()) {
             return res;
         }
@@ -43,7 +42,7 @@ public class VoteApplicationService {
         TextChannel channel = jda.getTextChannelById(channelId);
         if (channel != null) {
             // 5) 디스코드에 즉시 최신 투표 현황 공유
-            wendyNotifier.shareVoteStatus(channel);
+            discordWendyNotifier.shareVoteStatus(channel);
         }
 
         return res;

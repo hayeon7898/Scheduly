@@ -178,7 +178,7 @@ public ResponseEntity<ParticipantDtos.ParticipantRes> updateParticipant(
             @Valid @RequestBody ParticipantDtos.SubmitScheduleReq request) {
         
         ParticipantDtos.ParticipantScheduleRes response = 
-            voteApplicationService.submitSchedule(participantId, request);
+            participantService.submitSchedule(participantId, request);
         return ResponseEntity.ok(response);
     }
 

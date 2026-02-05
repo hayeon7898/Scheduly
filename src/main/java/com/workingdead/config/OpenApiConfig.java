@@ -5,12 +5,12 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Swagger springdoc-ui 구성 파일
- */
+import java.util.List;
+
 @Configuration
 public class OpenApiConfig {
     @Bean
@@ -18,7 +18,7 @@ public class OpenApiConfig {
         Info info = new Info()
                 .title("API Document")
                 .version("v5.28.1")
-                .description("UniConnect 백엔드 API 명세");
+                .description("WorkingDead 백엔드 API 명세");
 
         SecurityScheme securityScheme = new SecurityScheme()
                 .type(SecurityScheme.Type.HTTP)
@@ -29,10 +29,15 @@ public class OpenApiConfig {
 
         SecurityRequirement securityRequirement = new SecurityRequirement().addList("Bearer Authentication");
 
+        Server localServer= new Server().url("http://localhost:8080").description("Local 서버");
+        Server whendAppServer= new Server().url("https://whend.app").description("배포 서버");
+
         return new OpenAPI()
-                .components(new Components().addSecuritySchemes("Bearer Authentication", securityScheme))
-                .addSecurityItem(securityRequirement)
-                .info(info);
+                .info(info)
+                .servers(List.of(localServer, whendAppServer))
+                .components(new Components()
+                        .addSecuritySchemes("bearerAuth", securityScheme))
+                .addSecurityItem(securityRequirement);
     }
 }
 
