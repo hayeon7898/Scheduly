@@ -7,18 +7,30 @@ import java.util.List;
 
 
 public class ParticipantDtos {
-    public record CreateParticipantReq(@NotBlank String displayName) {}
+    public record CreateParticipantReq(
+        @NotBlank String displayName, 
+        String kakaoId
+    ) {}
     public record UpdateParticipantReq(String displayName) {}
-    public record ParticipantRes(Long id, String displayName, boolean loggedIn // 로그인 상태
-        ) {}
+    public record ParticipantRes(
+        Long id, 
+        String displayName, 
+        boolean loggedIn // 로그인 상태
+    ) {}
 
     // 단순 상태 조회용 DTO (투표 여부 판단 전용)
     public record ParticipantStatusRes(
             Long id,
             String displayName,
-            boolean submitted
+            boolean submitted,
+            String kakaoId
     ) {}
 
+    // 카카오 ID로 조회용
+    public record ParticipantByKakaoRes(
+        Long participantId,
+        String displayName
+    ) {}
 
     // 일정 제출 요청
     public record SubmitScheduleReq(

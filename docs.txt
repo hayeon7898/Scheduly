@@ -1,0 +1,22 @@
+# Notes: Spec ↔ Implementation 매핑
+#
+# page#0 관리자 페이지
+# 0.1 홈화면
+# GET /votes : 목록 (id, name, code, adminUrl, shareUrl)
+    투표 블록 터치 → GET /votes/{id} 로 상세 조회
+# POST /votes : 새 투표 생성 (res.shareUrl 로 링크 복사)
+    날짜 2개 선택 → backend에는 startDate,endDate로 저장 (두 날짜 포함 범위)
+    프론트에서 3번째 날짜 선택 시 프론트 로직으로 2개만 유지 → 서버엔 항상 (start,end)만 전달
+# DELETE /votes/{id} : 투표 삭제
+# PATCH /votes/{id} : 이름/날짜 범위 수정 (둘 다 vote attr)
+
+#
+# 0.2 투표 설정 화면
+# 참여자 칩 생성 섹션: POST /votes/{id}/participants {displayName}
+    생성된 응답에 loginCode 포함(칩/매직링크 구현용)
+# 참여자 삭제: DELETE /participants/{participantId}
+#
+# 기타
+# Vote 삭제 시 @OneToMany(cascade=ALL, orphanRemoval=true)로 참가자 함께 삭제
+# 코드/링크: app.base-url + "/v/" + code (공유 링크), "/admin/votes/{id}" (관리 URL)
+# Validation: endDate >= startDate. name not blank.

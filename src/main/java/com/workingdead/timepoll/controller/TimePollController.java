@@ -4,7 +4,6 @@ import com.workingdead.meet.dto.request.TimePollCreateRequest;
 import com.workingdead.meet.dto.request.TimePollSubmitRequest;
 import com.workingdead.meet.dto.response.TimePollResponse;
 import com.workingdead.meet.dto.response.TimePollStatusResponse;
-import com.workingdead.meet.dto.response.TimePollStatusResponse;
 import com.workingdead.meet.entity.TimePoll;
 import com.workingdead.meet.service.TimePollService;
 import lombok.RequiredArgsConstructor;
@@ -80,5 +79,15 @@ public class TimePollController {
     public ResponseEntity<Void> finalize(@PathVariable Long pollId) {
         timePollService.finalize(pollId);
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * API #7 - 투표 ID 조회
+     * GET /time-polls/{pollId}/vote
+     */
+    @GetMapping("/{pollId}/vote")
+    public ResponseEntity<Map<String, Long>> getVoteId(@PathVariable Long pollId) {
+        Long voteId = timePollService.getVoteIdByPollId(pollId);
+        return ResponseEntity.ok(Map.of("voteId", voteId));
     }
 }

@@ -14,8 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalTime;
+import java.time.LocalDate;
+import java.time.LocalDateTime; 
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import com.workingdead.timepoll.enums.Period;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +42,7 @@ public class TimePollService {
         TimePoll timePoll = TimePoll.builder()
                 .vote(vote)
                 .confirmedDate(request.getConfirmedDate())
+                .period(request.getPeriod())
                 .status(TimePollStatus.ONGOING)
                 .build();
 
@@ -49,6 +55,13 @@ public class TimePollService {
      */
     public TimePollResponse getTimePoll(Long pollId, Long participantId) {
         TimePoll timePoll = findById(pollId);
+
+        boolean isParticipant = timePoll.getVote().getParticipants().stream()
+                .anyMatch(p -> p.getId().equals(participantId));
+        if (!isParticipant) {
+            throw new IllegalArgumentException("해당 투표에 접근 권한이 없습니다.");
+        }
+
         int totalParticipants = timePoll.getVote().getParticipants().size();
         long submittedCount = timePollEntryRepository.countByTimePollId(pollId);
 
@@ -59,6 +72,7 @@ public class TimePollService {
         return TimePollResponse.builder()
                 .id(timePoll.getId())
                 .confirmedDate(timePoll.getConfirmedDate())
+                .period(timePoll.getPeriod())
                 .status(timePoll.getStatus())
                 .finalizedTime(timePoll.getFinalizedTime())
                 .totalParticipants(totalParticipants)
@@ -141,6 +155,7 @@ public class TimePollService {
         return TimePollStatusResponse.builder()
                 .timePollId(timePoll.getId())
                 .confirmedDate(timePoll.getConfirmedDate())
+                .period(timePoll.getPeriod())
                 .status(timePoll.getStatus())
                 .finalizedTime(timePoll.getFinalizedTime())
                 .totalParticipants(allParticipants.size())
@@ -239,6 +254,15 @@ public class TimePollService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 투표 ID 조회 (API #7)
+     */
+    public Long getVoteIdByPollId(Long pollId) {
+        return timePollRepository.findById(pollId)
+                .orElseThrow(() -> new NoSuchElementException("TimePoll not found"))
+                .getVote().getId();
+    }
+
     // === private ===
 
     private TimePoll findById(Long pollId) {
@@ -261,5 +285,39 @@ public class TimePollService {
                         .thenComparing(Map.Entry::getKey))
                 .map(Map.Entry::getKey)
                 .orElseThrow();
+    }
+    public List<Participant> getPendingParticipants(Long pollId) {
+        TimePoll timePoll = findById(pollId);
+        List<Participant> allParticipants = timePoll.getVote().getParticipants();
+        List<TimePollEntry> entries = timePollEntryRepository.findByTimePollId(pollId);
+
+        Set<Long> submittedIds = entries.stream()
+                .map(e -> e.getParticipant().getId())
+                .collect(Collectors.toSet());
+
+        return allParticipants.stream()
+                .filter(p -> !submittedIds.contains(p.getId()))
+                .filter(p -> p.getKakaoId() != null && !p.getKakaoId().isBlank())
+                .collect(Collectors.toList());
+    }
+    public Instant getCreatedAt(Long voteId) {
+        return voteRepository.findById(voteId)
+                .orElseThrow(() -> new NoSuchElementException("vote not found"))
+                .getCreatedAt();
+    }
+    public String getTopTimeLabel(Long pollId) {
+        List<TimePollEntry> entries = timePollEntryRepository.findByTimePollId(pollId);
+        if (entries.isEmpty()) {
+                return "미정";
+        }
+
+        LocalTime topTime = getMostVotedTime(pollId);
+        return topTime.format(DateTimeFormatter.ofPattern("HH:mm"));
+    }
+    public void delete(Long timePollId) {
+        timePollRepository.deleteById(timePollId);
+    }
+    public Instant getTimePollCreatedAt(Long timePollId) {
+        return findById(timePollId).getCreatedAt();
     }
 }

@@ -3,9 +3,9 @@ spring:
     name: workingdead
 
   datasource:
-    url: jdbc:postgresql://workingdead.cri4yyouailh.ap-northeast-2.rds.amazonaws.com:5432/workingdead?sslmode=require
+    url: jdbc:postgresql://scheduly-db.cng2gu6gg3zp.ap-northeast-2.rds.amazonaws.com:5432/scheduly?sslmode=require
     username: postgres
-    password: ${DB_PASSWORD}
+    password: ${DB_PASSWORD:}
 
   jpa:
     hibernate:
@@ -65,10 +65,10 @@ springdoc:
   packages-to-scan: com.workingdead
 
 discord:
-  token: ${DISCORD_TOKEN}
+  token: ${DISCORD_TOKEN:}
 
 kakao:
-  rest-api-key: ${KAKAO_REST_API_KEY}
+  rest-api-key: ${KAKAO_REST_API_KEY:}
   admin-key: ${KAKAO_ADMIN_KEY:}
   channel-id: ${KAKAO_CHANNEL_ID:}
   bot-id: ${KAKAO_BOT_ID:}

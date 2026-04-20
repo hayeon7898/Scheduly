@@ -40,7 +40,7 @@ public class ParticipantController {
         this.voteApplicationService = voteApplicationService;
     }
 
-    // 0.2 참여자 추가/삭제
+    // 0.2 참여자 추가/조회/삭제
     @Operation(
             summary = "참여자 추가",
             description = "특정 투표에 새로운 참여자를 추가합니다. displayName을 기반으로 참여자 칩이 생성됩니다."
@@ -55,10 +55,27 @@ public class ParticipantController {
     public ResponseEntity<ParticipantDtos.ParticipantRes> add(
             @PathVariable Long voteId, 
             @RequestBody @Valid ParticipantDtos.CreateParticipantReq req) {
-        var res = participantService.add(voteId, req.displayName());
+        //var res = participantService.add(voteId, req.displayName(), req.kakaoId());
+        var res = participantService.addOrUpdate(voteId, req.displayName(), req.kakaoId());
         return ResponseEntity.ok(res);
     }
 
+    @Operation(
+            summary = "카카오 ID로 참여자 조회",
+            description = "특정 투표에 참여하는 참여자 중 카카오 ID로 조회합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "참여자 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ParticipantDtos.ParticipantRes.class))),
+            @ApiResponse(responseCode = "404", description = "투표를 찾을 수 없음", content = @Content)
+    })
+    @GetMapping("/votes/{voteId}/participants/kakao/{kakaoId}")
+    public ResponseEntity<ParticipantDtos.ParticipantByKakaoRes> getByKakaoId(
+            @PathVariable Long voteId,
+            @PathVariable String kakaoId) {
+        ParticipantDtos.ParticipantByKakaoRes res = participantService.getByKakaoId(voteId, kakaoId);
+        return ResponseEntity.ok(res);
+    }
     @Operation(
             summary = "참여자 삭제",
             description = "특정 참여자를 삭제합니다."
@@ -101,13 +118,25 @@ public class ParticipantController {
             @ApiResponse(responseCode = "200", description = "참여자 목록 조회 성공"),
             @ApiResponse(responseCode = "404", description = "투표를 찾을 수 없음")
     })
+//     @GetMapping("/votes/{voteId}/participants")
+//     public ResponseEntity<List<ParticipantDtos.ParticipantRes>> getParticipants(
+//             @PathVariable Long voteId,
+//             @RequestParam(required = false) Long currentParticipantId
+//     ) {
+//         List<ParticipantDtos.ParticipantRes> participants = 
+//                 participantService.getParticipantsForVote(voteId, currentParticipantId);
+//         return ResponseEntity.ok(participants);
+//     }
     @GetMapping("/votes/{voteId}/participants")
     public ResponseEntity<List<ParticipantDtos.ParticipantRes>> getParticipants(
             @PathVariable Long voteId,
             @RequestParam(required = false) Long currentParticipantId
     ) {
         List<ParticipantDtos.ParticipantRes> participants = 
-                participantService.getParticipantsForVote(voteId, currentParticipantId);
+                participantService.getParticipantsForVote(voteId, currentParticipantId)
+                        .stream()
+                        .filter(p -> !p.displayName().equals("미등록") && !p.displayName().isBlank())
+                        .toList();
         return ResponseEntity.ok(participants);
     }
     
@@ -116,32 +145,32 @@ public class ParticipantController {
      * 참여자 정보 부분 수정 (리플렉션)
      */
     @PatchMapping("/participants/{id}/info")
-public ResponseEntity<ParticipantDtos.ParticipantRes> updateParticipant(
+    public ResponseEntity<ParticipantDtos.ParticipantRes> updateParticipant(
         @PathVariable Long id,
         @RequestBody Map<String, Object> updates) {
 
-    Participant participant = participantRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Not found"));
+        Participant participant = participantRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Not found"));
 
-    updates.forEach((key, value) -> {
-        Field field = ReflectionUtils.findField(Participant.class, key);
-        if (field != null) {
-            field.setAccessible(true);
-            ReflectionUtils.setField(field, participant, value);
-        }
-    });
+        updates.forEach((key, value) -> {
+                Field field = ReflectionUtils.findField(Participant.class, key);
+                if (field != null) {
+                field.setAccessible(true);
+                ReflectionUtils.setField(field, participant, value);
+                }
+        });
 
-    Participant saved = participantRepository.save(participant);
-    
-    // DTO로 변환해서 반환!
-    ParticipantDtos.ParticipantRes response = new ParticipantDtos.ParticipantRes(
-        saved.getId(),
-        saved.getDisplayName(),
-        false  // loggedIn 상태
-    );
-    
-    return ResponseEntity.ok(response);
-}
+        Participant saved = participantRepository.save(participant);
+        
+        // DTO로 변환해서 반환!
+        ParticipantDtos.ParticipantRes response = new ParticipantDtos.ParticipantRes(
+                saved.getId(),
+                saved.getDisplayName(),
+                false  // loggedIn 상태
+        );
+        
+        return ResponseEntity.ok(response);
+    }
 
     /**
      * POST /participants/{participantId}

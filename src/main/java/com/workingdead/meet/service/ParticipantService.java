@@ -4,6 +4,7 @@ import com.workingdead.meet.dto.*;
 import com.workingdead.meet.entity.*;
 import com.workingdead.meet.repository.*;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,14 +40,18 @@ public class ParticipantService {
         this.priorityRepo = priorityRepo;                            // 추가!
     }
 
-    public ParticipantDtos.ParticipantRes add(Long voteId, String displayName) {
+    public ParticipantDtos.ParticipantRes add(Long voteId, String displayName, String kakaoId) {
         Vote v = voteRepo.findById(voteId)
-                        .orElseThrow(() -> new NoSuchElementException("vote not found"));
-        Participant p = new Participant(v, displayName);
+                .orElseThrow(() -> new NoSuchElementException("vote not found"));
+        Participant p = new Participant(v, displayName, kakaoId);
         participantRepo.save(p);
         return new ParticipantDtos.ParticipantRes(p.getId(), p.getDisplayName(), false);
     }
-
+    public ParticipantDtos.ParticipantByKakaoRes getByKakaoId(Long voteId, String kakaoId) {
+        Participant p = participantRepo.findByVoteIdAndKakaoId(voteId, kakaoId)
+                .orElseThrow(() -> new NoSuchElementException("participant not found"));
+        return new ParticipantDtos.ParticipantByKakaoRes(p.getId(), p.getDisplayName());
+    }
     public ParticipantDtos.ParticipantRes updateParticipant(Long participantId, ParticipantDtos.UpdateParticipantReq request) {
         Participant participant = participantRepo.findById(participantId)
                 .orElseThrow(() -> new NoSuchElementException("Participant not found"));
@@ -70,9 +75,14 @@ public class ParticipantService {
                 .map(p -> new ParticipantDtos.ParticipantStatusRes(
                         p.getId(),
                         p.getDisplayName(),
-                        Boolean.TRUE.equals(p.getSubmitted())
+                        Boolean.TRUE.equals(p.getSubmitted()),
+                        p.getKakaoId()
                 ))
                 .toList();
+    }
+
+    public List<Participant> getParticipants(Long voteId) {
+        return participantRepo.findByVoteId(voteId);
     }
 
     @Transactional
@@ -99,22 +109,32 @@ public class ParticipantService {
         participantRepo.deleteById(participantId);
     }
 
-    public List<ParticipantDtos.ParticipantRes> getParticipantsForVote(Long voteId) {
-        return participantRepo.findByVoteId(voteId).stream()
-                .map(p -> new ParticipantDtos.ParticipantRes(
-                        p.getId(),
-                        p.getDisplayName(),
-                        false 
-                ))
-                .collect(Collectors.toList());
-    }
+//     public List<ParticipantDtos.ParticipantRes> getParticipantsForVote(Long voteId) {
+//         return participantRepo.findByVoteId(voteId).stream()
+//                 .map(p -> new ParticipantDtos.ParticipantRes(
+//                         p.getId(),
+//                         p.getDisplayName(),
+//                         false 
+//                 ))
+//                 .collect(Collectors.toList());
+//     }
 
-    public List<ParticipantDtos.ParticipantRes> getParticipantsForVote(Long voteId, Long currentParticipantId) {
+//     public List<ParticipantDtos.ParticipantRes> getParticipantsForVote(Long voteId, Long currentParticipantId) {
+//         return participantRepo.findByVoteId(voteId).stream()
+//                 .map(p -> new ParticipantDtos.ParticipantRes(
+//                         p.getId(),
+//                         p.getDisplayName(),
+//                         p.getId().equals(currentParticipantId)
+//                 ))
+//                 .collect(Collectors.toList());
+//     }
+   public List<ParticipantDtos.ParticipantRes> getParticipantsForVote(Long voteId, Long currentParticipantId) {
         return participantRepo.findByVoteId(voteId).stream()
+                .filter(p -> p.getDisplayName() != null && !p.getDisplayName().isBlank()) // null 필터링도 추가
                 .map(p -> new ParticipantDtos.ParticipantRes(
                         p.getId(),
                         p.getDisplayName(),
-                        p.getId().equals(currentParticipantId)
+                        currentParticipantId != null && p.getId().equals(currentParticipantId)
                 ))
                 .collect(Collectors.toList());
     }
@@ -251,5 +271,28 @@ public class ParticipantService {
         Participant participant = participantRepo.findById(participantId)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid participant ID"));
         return participant.getVote().getId();
+    }
+
+    public void addIfNotExists(Long voteId, String kakaoId) {
+        if (participantRepo.findByVoteIdAndKakaoId(voteId, kakaoId).isEmpty()) {
+                Vote v = voteRepo.findById(voteId)
+                        .orElseThrow(() -> new NoSuchElementException("vote not found"));
+                Participant p = new Participant(v, "미등록", kakaoId); // displayName은 나중에 업데이트
+                participantRepo.save(p);
+        }
+    }
+
+    // 기존 add() 대신, kakaoId로 찾아서 displayName 업데이트
+    public ParticipantDtos.ParticipantRes addOrUpdate(Long voteId, String displayName, String kakaoId) {
+        Optional<Participant> existing = participantRepo.findByVoteIdAndKakaoId(voteId, kakaoId);
+        if (existing.isPresent()) {
+                // 이미 등록된 경우 displayName만 업데이트
+                Participant p = existing.get();
+                p.setDisplayName(displayName);
+                participantRepo.save(p);
+                return new ParticipantDtos.ParticipantRes(p.getId(), p.getDisplayName(), false);
+        }
+        // 없으면 새로 등록 (카카오 외 경로)
+        return add(voteId, displayName, kakaoId);
     }
 }

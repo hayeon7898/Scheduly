@@ -7,10 +7,12 @@ import com.workingdead.meet.dto.VoteResultDtos.RankingRes;
 import com.workingdead.meet.dto.VoteResultDtos.VoteResultRes;
 import com.workingdead.meet.service.ParticipantService;
 import com.workingdead.meet.service.VoteResultService;
+import com.workingdead.chatbot.kakao.scheduler.KakaoWendyScheduler;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -29,7 +31,7 @@ import java.util.stream.Collectors;
  * - 개인챗은 스킬 응답으로만 메시지 전송 가능 (Pull 방식)
  */
 @Service
-@RequiredArgsConstructor
+// @RequiredArgsConstructor
 @Slf4j
 public class KakaoNotifier {
 
@@ -40,6 +42,26 @@ public class KakaoNotifier {
     private final ParticipantService participantService;
     private final RestTemplate kakaoRestTemplate;
     private final ObjectMapper objectMapper;
+    private final KakaoWendyScheduler kakaoWendyScheduler;
+
+    public KakaoNotifier(
+            KakaoConfig kakaoConfig,
+            @Lazy KakaoWendyService kakaoWendyService,
+            KakaoBotApiClient kakaoBotApiClient,
+            VoteResultService voteResultService,
+            ParticipantService participantService,
+            RestTemplate kakaoRestTemplate,
+            ObjectMapper objectMapper,
+            @Lazy KakaoWendyScheduler kakaoWendyScheduler) {
+        this.kakaoConfig = kakaoConfig;
+        this.kakaoWendyService = kakaoWendyService;
+        this.kakaoBotApiClient = kakaoBotApiClient;
+        this.voteResultService = voteResultService;
+        this.participantService = participantService;
+        this.kakaoRestTemplate = kakaoRestTemplate;
+        this.objectMapper = objectMapper;
+        this.kakaoWendyScheduler = kakaoWendyScheduler;
+    }
 
     // ========== Event API (그룹 채팅방 메시지 발송) ==========
 
@@ -56,8 +78,10 @@ public class KakaoNotifier {
                 return;
             }
 
+            
+
             KakaoBotApiClient.EventResponse response =
-                    kakaoBotApiClient.sendEventMessage(List.of(botGroupKey), eventName);
+                    kakaoBotApiClient.sendEventMessage(botGroupKey, eventName);
             log.info("[Kakao Notifier] Event sent: botGroupKey={}, eventName={}, taskId={}",
                     botGroupKey, eventName, response.getTaskId());
 
@@ -83,6 +107,8 @@ public class KakaoNotifier {
             long submittedCount = statuses.stream().filter(s -> Boolean.TRUE.equals(s.submitted())).count();
             long totalCount = statuses.size();
 
+            log.info("elapsedSeconds={}, submittedCount={}, totalCount={}", elapsedSeconds, submittedCount, totalCount);    
+
             // 참가자 자체가 없는 비정상 케이스(생성 꼬임 등) 방어
             if (totalCount == 0) {
                 log.warn("[Kakao Notifier] No participants found for voteId={}", voteId);
@@ -100,16 +126,17 @@ public class KakaoNotifier {
 
             // 3분 경과했는데 0명 투표면 안내 메시지
             if (elapsedSeconds >= 180 && submittedCount == 0) {
+                log.info("elapsedSeconds={}, submittedCount={}", elapsedSeconds, submittedCount);
                 sendToGroupIfPossible(voteId, "status_nobody_voted");
                 return;
             }
 
             // 결과 공유
-            sendToGroupIfPossible(voteId, "status_vote_result");
+            sendToGroupIfPossible(voteId, "result_D");
 
             // 전원 투표 완료면 완료 단계로 이동 트리거
             if (allSubmitted) {
-                sendToGroupIfPossible(voteId, "status_all_done");
+                sendToGroupIfPossible(voteId, "finish_D");
             }
 
 
@@ -126,7 +153,7 @@ public class KakaoNotifier {
             List<String> nonVoters = getNonVoterNames(voteId);
             if (nonVoters.isEmpty()) return; // 미투표자 없으면 전송 X
 
-            sendToGroupIfPossible(voteId, "final_notice_24h");
+            sendToGroupIfPossible(voteId, "final_D");
         } catch (Exception e) {
             log.error("[Kakao Notifier] sendFinalNotice failed: {}", e.getMessage(), e);
         }
@@ -140,7 +167,7 @@ public class KakaoNotifier {
             List<String> nonVoters = getNonVoterNames(voteId);
             if (nonVoters.isEmpty()) return; // 이미 다 했으면 확정 처리 X
 
-            sendToGroupIfPossible(voteId, "finalize_after_60m");
+            sendToGroupIfPossible(voteId, "finish_D");
 
         } catch (Exception e) {
             log.error("[Kakao Notifier] finalizeIfNoResponse failed: {}", e.getMessage(), e);
@@ -149,6 +176,7 @@ public class KakaoNotifier {
 
     private void sendToGroupIfPossible(Long voteId, String eventName) {
         String botGroupKey = kakaoWendyService.getBotGroupKeyByVoteId(voteId);
+    
         if (botGroupKey != null && !botGroupKey.isBlank()) {
             sendEventToGroup(botGroupKey, eventName);
         } else {
@@ -159,7 +187,7 @@ public class KakaoNotifier {
     /**
      * 미투표자 리마인드 (이벤트 메시지)
      */
-    public void remindNonVoters(String sessionKey, RemindTiming timing) {
+    public void remindNonVoters(String sessionKey, String timing) {
         try {
             Long voteId = kakaoWendyService.getVoteIdBySessionKey(sessionKey);
             if (voteId == null) {
@@ -174,11 +202,13 @@ public class KakaoNotifier {
             }
 
 
-            String eventName = switch (timing) {
-                case MIN_30 -> "remind_30min";
-                case HOUR_2 -> "remind_2hour";
-                case HOUR_6 -> "remind_6hour";
-                case HOUR_12 -> "remind_12hour";
+            String eventName = switch (timing == null ? "DEFAULT" : timing) {
+                case "3min" -> "status_nobody_voted";
+                case "30min" -> "remind_D_30M";
+                case "2hour" -> "remind_D_2H";
+                case "6hour" -> "remind_D_6H";
+                case "12hour" -> "remind_D_12H";
+                default -> "remind_D_30M";
             };
 
             // botGroupKey 조회 (그룹챗인 경우에만 이벤트 발송)
@@ -248,6 +278,28 @@ public class KakaoNotifier {
     }
 
     /**
+     * 5분마다 투표 현황 체크
+     */
+    public void checkAllVoted(String sessionKey) {
+        try {
+            Long voteId = kakaoWendyService.getVoteIdBySessionKey(sessionKey);
+            if (voteId == null) return;
+
+            List<ParticipantStatusRes> statuses = participantService.getParticipantStatusByVoteId(voteId);
+            long submitted = statuses.stream().filter(s -> Boolean.TRUE.equals(s.submitted())).count();
+            long total = statuses.size();
+
+            if (total > 0 && submitted == total) {
+                log.info("[Kakao Notifier] All voted! sessionKey={}", sessionKey);
+                sendToGroupIfPossible(voteId, "finish_D");
+                kakaoWendyScheduler.stopSchedule(sessionKey); // 폴링 중지
+            }
+        } catch (Exception e) {
+            log.error("[Kakao Notifier] checkAllVoted failed: {}", e.getMessage());
+        }
+    }
+
+    /**
      * 카카오 메시지 API 호출 (템플릿)
      *
      * 참고: 실제 사용하려면 카카오 비즈메시지 설정 필요
@@ -309,7 +361,4 @@ public class KakaoNotifier {
         };
     }
 
-    public enum RemindTiming {
-        MIN_30, HOUR_2, HOUR_6, HOUR_12
-    }
 }

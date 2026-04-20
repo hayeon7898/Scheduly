@@ -27,6 +27,9 @@ public class Participant {
     @Column(name = "display_name", nullable = false)
     private String displayName;
 
+    @Column(name = "kakao_id")
+    private String kakaoId;
+
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;
     
@@ -43,8 +46,9 @@ public class Participant {
     private List<PriorityPreference> priorities = new ArrayList<>();
     
     // 편의 생성자
-    public Participant(Vote vote, String displayName) {
+    public Participant(Vote vote, String displayName, String kakaoId) {
         this.vote = vote;
         this.displayName = displayName;
+        this.kakaoId = kakaoId;
     }
 }

@@ -9,6 +9,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,7 @@ public class KakaoBotApiClient {
 
     private final KakaoConfig kakaoConfig;
     private final RestTemplate kakaoRestTemplate;
+    private final ObjectMapper objectMapper;
 
     // ==================== Event API ====================
 
@@ -33,30 +35,112 @@ public class KakaoBotApiClient {
      * 그룹 채팅방에 이벤트 메시지 발송
      * POST /v2/bots/{botId}/group
      *
-     * @param botGroupKeys 발송 대상 채팅방 키 리스트 (최대 100개)
+     * @param botGroupKey 발송 대상 채팅방 키
      * @param eventName    관리자센터에 등록한 이벤트 블록 이름
      * @return EventResponse (taskId, status)
      */
-    public EventResponse sendEventMessage(List<String> botGroupKeys, String eventName) {
-        String url = KakaoConfig.BOT_API_BASE_URL + "/v2/bots/" + kakaoConfig.getBotId() + "/group";
+    // public EventResponse sendEventMessage(List<String> botGroupKeys, String eventName) {
+    //     String url = KakaoConfig.BOT_API_BASE_URL + "/v2/bots/" + kakaoConfig.getBotId() + "/group";
 
-        EventRequest request = EventRequest.builder()
-                .chat(botGroupKeys.stream()
-                        .map(key -> Map.of("id", key))
-                        .toList())
-                .event(Map.of("name", eventName))
-                .build();
+    //     EventRequest request = EventRequest.builder()
+    //             .chat(botGroupKeys.stream()
+    //                     .map(key -> Map.of("id", key))
+    //                     .toList())
+    //             .event(Map.of("name", eventName))
+    //             .build();
 
-        HttpEntity<EventRequest> entity = new HttpEntity<>(request, createHeaders());
+    //     HttpEntity<EventRequest> entity = new HttpEntity<>(request, createHeaders());
+    //     log.info("[KakaoBotApi] payload = {}", objectMapper.writeValueAsString(payload));
+
+    //     try {
+    //         ResponseEntity<EventResponse> response = kakaoRestTemplate.exchange(
+    //                 url, HttpMethod.POST, entity, EventResponse.class);
+    //         log.info("[KakaoBotApi] Event message sent. taskId: {}", response.getBody().getTaskId());
+    //         return response.getBody();
+    //     } catch (Exception e) {
+    //         log.error("[KakaoBotApi] Failed to send event message: {}", e.getMessage());
+    //         throw new RuntimeException("Failed to send Kakao event message", e);
+    //     }
+    // }
+    // public EventResponse sendEventMessage(String botGroupKey, String eventName) {
+    //     String url = KakaoConfig.BOT_API_BASE_URL + "/v2/bots/" + kakaoConfig.getBotId() + "/group";
+
+    //     Map<String, Object> payload = Map.of(
+    //         "chat", botGroupKeys.stream()
+    //             .map(key -> Map.of(
+    //                 "id", key,
+    //                 "type", "botGroupKey"   // 🔥 핵심
+    //             ))
+    //             .toList(),
+    //         "event", Map.of(
+    //             "name", eventName,
+    //             "data", Map.of()          // 🔥 핵심
+    //         )
+    //     );
+
+    //     HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, createHeaders());
+        
+
+    //     // 🔥 제대로 된 로그
+    //     try {
+    //         log.info("[KakaoBotApi] payload = {}", objectMapper.writeValueAsString(payload));
+    //     } catch (Exception e) {
+    //         log.warn("payload logging failed");
+    //     }
+
+    //     try {
+    //         ResponseEntity<EventResponse> response = kakaoRestTemplate.exchange(
+    //                 url, HttpMethod.POST, entity, EventResponse.class);
+
+    //         log.info("[KakaoBotApi] Event message sent. taskId: {}", response.getBody().getTaskId());
+    //         return response.getBody();
+
+    //     } catch (Exception e) {
+    //         log.error("[KakaoBotApi] Failed to send event message: {}", e.getMessage());
+    //         throw new RuntimeException("Failed to send Kakao event message", e);
+    //     }
+    // }
+    public EventResponse sendEventMessage(String botGroupKey, String eventName) {
+
+        String url = KakaoConfig.BOT_API_BASE_URL
+                + "/v2/bots/" + kakaoConfig.getBotId() + "/group";
+
+        Map<String, Object> payload = Map.of(
+            "chat", List.of(
+                Map.of(
+                    "id", botGroupKey,
+                    "type", "botGroupKey"
+                )
+            ),
+            "event", Map.of(
+                "name", eventName,
+                "data", Map.of()
+            )
+        );
+
+        HttpEntity<Map<String, Object>> entity =
+                new HttpEntity<>(payload, createHeaders());
 
         try {
-            ResponseEntity<EventResponse> response = kakaoRestTemplate.exchange(
-                    url, HttpMethod.POST, entity, EventResponse.class);
-            log.info("[KakaoBotApi] Event message sent. taskId: {}", response.getBody().getTaskId());
+            log.info("[KakaoBotApi] payload = {}",
+                    objectMapper.writeValueAsString(payload));
+
+            ResponseEntity<EventResponse> response =
+                    kakaoRestTemplate.exchange(
+                            url,
+                            HttpMethod.POST,
+                            entity,
+                            EventResponse.class
+                    );
+
+            log.info("[KakaoBotApi] Event sent OK taskId={}",
+                    response.getBody() != null ? response.getBody().getTaskId() : "null");
+
             return response.getBody();
+
         } catch (Exception e) {
-            log.error("[KakaoBotApi] Failed to send event message: {}", e.getMessage());
-            throw new RuntimeException("Failed to send Kakao event message", e);
+            log.error("[KakaoBotApi] sendEventMessage failed", e);
+            throw new RuntimeException(e);
         }
     }
 
@@ -134,7 +218,7 @@ public class KakaoBotApiClient {
      * 특정 채팅방의 참여 유저 목록 조회
      * GET /v2/bots/{botId}/group-chat-rooms/{botGroupKey}/members
      */
-    public ChatRoomMembersResponse getChatRoomMembers(String botGroupKey) {
+    public List<String> getChatRoomMembers(String botGroupKey) {
         String url = KakaoConfig.BOT_API_BASE_URL + "/v2/bots/" + kakaoConfig.getBotId()
                 + "/group-chat-rooms/" + botGroupKey + "/members";
 
@@ -143,9 +227,17 @@ public class KakaoBotApiClient {
         try {
             ResponseEntity<ChatRoomMembersResponse> response = kakaoRestTemplate.exchange(
                     url, HttpMethod.GET, entity, ChatRoomMembersResponse.class);
-            log.info("[KakaoBotApi] Got {} members in chat room {}",
-                    response.getBody().getMembers().size(), botGroupKey);
-            return response.getBody();
+
+            List<String> users = response.getBody().getUsers();
+
+            if (users == null) {
+                log.warn("[KakaoBotApi] users is null. response={}", response.getBody());
+                return List.of();
+            }
+
+            log.info("[KakaoBotApi] Got {} users in chat room {}", users.size(), botGroupKey);
+            return users;
+
         } catch (Exception e) {
             log.error("[KakaoBotApi] Failed to get chat room members: {}", e.getMessage());
             throw new RuntimeException("Failed to get chat room members", e);
@@ -154,13 +246,26 @@ public class KakaoBotApiClient {
 
     // ==================== Helper Methods ====================
 
+    // private HttpHeaders createHeaders() {
+    //     HttpHeaders headers = new HttpHeaders();
+    //     headers.setContentType(MediaType.APPLICATION_JSON);
+    //     headers.set("Authorization", "KakaoBK " + kakaoConfig.getRestApiKey());
+    //     return headers;
+    // }
+
     private HttpHeaders createHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "KakaoAK " + kakaoConfig.getRestApiKey());
+
+        String auth = "KakaoBK " + kakaoConfig.getRestApiKey();
+        headers.set("Authorization", auth);
+
+        // log.info("=== [KakaoBotApi] Authorization Header ===");
+        // log.info("auth = [{}]", auth);
+        // log.info("restApiKey raw = [{}]", kakaoConfig.getRestApiKey());
+
         return headers;
     }
-
     // ==================== Request/Response DTOs ====================
 
     @Getter
@@ -223,19 +328,27 @@ public class KakaoBotApiClient {
         }
     }
 
+    // @Getter
+    // @NoArgsConstructor
+    // @AllArgsConstructor
+    // public static class ChatRoomMembersResponse {
+    //     private List<ChatRoomMember> members;
+
+    //     @Getter
+    //     @NoArgsConstructor
+    //     @AllArgsConstructor
+    //     public static class ChatRoomMember {
+    //         private String botUserKey;
+    //         private String nickname;
+    //         private String profileImageUrl;
+    //     }
+    // }
     @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class ChatRoomMembersResponse {
-        private List<ChatRoomMember> members;
 
-        @Getter
-        @NoArgsConstructor
-        @AllArgsConstructor
-        public static class ChatRoomMember {
-            private String botUserKey;
-            private String nickname;
-            private String profileImageUrl;
-        }
+        @JsonProperty("users")
+        private List<String> users;
     }
 }

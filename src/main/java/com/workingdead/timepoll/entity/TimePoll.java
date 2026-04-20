@@ -8,6 +8,8 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.workingdead.timepoll.enums.Period;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -28,7 +30,12 @@ public class TimePoll {
 
     // 확정된 날짜 (날짜 투표 결과)
     @Column(name = "confirmed_date", nullable = false)
-    private String confirmedDate; // "1월 28일 저녁" 같은 형태
+    private String confirmedDate; // "1월 28일"
+
+    // 시간대 (아침/점심/저녁 등)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "period")
+    private Period period; // "저녁"
 
     // 투표 상태
     @Enumerated(EnumType.STRING)

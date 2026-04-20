@@ -5,12 +5,21 @@ import com.workingdead.chatbot.kakao.dto.KakaoRequest;
 import com.workingdead.chatbot.kakao.dto.KakaoResponse;
 import com.workingdead.chatbot.kakao.service.KakaoWendyService;
 import com.workingdead.chatbot.kakao.service.KakaoWendyService.SessionState;
+import com.workingdead.chatbot.kakao.scheduler.KakaoTimePollScheduler;
+import com.workingdead.meet.dto.response.TimePollStatusResponse;
+import com.workingdead.meet.service.TimePollService;
+import com.workingdead.timepoll.enums.Period;
+import com.fasterxml.jackson.core.JsonProcessingException;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.time.LocalTime;
 
 /**
  * 카카오 i 오픈빌더 스킬 서버 컨트롤러
@@ -27,7 +36,9 @@ import org.springframework.web.bind.annotation.*;
 public class KakaoSkillController {
 
     private final KakaoWendyService kakaoWendyService;
+    private final TimePollService timePollService;
     private final ObjectMapper objectMapper;
+    private final KakaoTimePollScheduler kakaoTimePollScheduler;
 
     /**
      * 세션 키 결정 (그룹챗이면 botGroupKey, 개인챗이면 userKey)
@@ -97,9 +108,9 @@ public class KakaoSkillController {
         }
 
         // 5. 웬디 재투표
-        if (trimmed.equals("웬디 재투표") || trimmed.equals("재투표")) {
+        if (trimmed.equals("웬디 재투표") || trimmed.equals("재투표") || trimmed.equals("재투표할래요")) {
             return ResponseEntity.ok(kakaoWendyService.revote(sessionKey));
-        }
+        }        
 
         // 6. 웬디 {기간} (예: "웬디 2주 후", "웬디 이번주")
         // 멘션/푸시 기능 없이, 기간 입력을 받으면 바로 투표 URL을 생성해 반환
@@ -115,7 +126,7 @@ public class KakaoSkillController {
                     && !arg.equals("독촉")) {
                 Integer weeks = kakaoWendyService.parseWeeks(arg);
                 if (weeks != null) {
-                    KakaoResponse response = kakaoWendyService.createVote(sessionKey, weeks, botGroupKey);
+                    KakaoResponse response = kakaoWendyService.createVote(sessionKey, weeks, botGroupKey, botUserKey);
                     return ResponseEntity.ok(response);
                 }
             }
@@ -130,14 +141,14 @@ public class KakaoSkillController {
                 // 참석자 입력: PRD 기준으로 botUserKey(멘션된 유저 키) 기반을 우선 사용
                 // 멘션 기반 참석자 수집 기능을 사용하지 않는 정책으로 전환
                 return ResponseEntity.ok(KakaoResponse.simpleText(
-                        "\"@웬디 2주 후\"처럼 기간을 입력하면 바로 날짜 투표 링크를 만들어드릴게요!"
+                        "\"@스케쥴리 2주 후\"처럼 기간을 입력하면 바로 날짜 투표 링크를 만들어드릴게요!"
                 ));
 
             case WAITING_WEEKS:
                 // 주차 선택
                 Integer weeks = kakaoWendyService.parseWeeks(trimmed);
                 if (weeks != null) {
-                    KakaoResponse response = kakaoWendyService.createVote(sessionKey, weeks, botGroupKey);
+                    KakaoResponse response = kakaoWendyService.createVote(sessionKey, weeks, botGroupKey, botUserKey);
                     return ResponseEntity.ok(response);
                 }
                 break;
@@ -158,6 +169,12 @@ public class KakaoSkillController {
     public ResponseEntity<KakaoResponse> handleStart(@RequestBody KakaoRequest request) {
         String sessionKey = getSessionKey(request);
         String botGroupKey = request.getBotGroupKey();
+        try {
+            log.info("[Kakao Skill Raw Request - START] {}", 
+                objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(request));
+        } catch (Exception e) {
+            log.warn("Failed to log raw request: {}", e.getMessage());
+        }
         log.info("[Kakao Skill] START - sessionKey={}, botGroupKey={}", sessionKey, botGroupKey);
         return ResponseEntity.ok(kakaoWendyService.startSession(sessionKey, botGroupKey));
     }
@@ -173,7 +190,7 @@ public class KakaoSkillController {
         String sessionKey = getSessionKey(request);
         log.info("[Kakao Skill] PARTICIPANTS - disabled. sessionKey={}", sessionKey);
         return ResponseEntity.ok(KakaoResponse.simpleText(
-                "\"@웬디 2주 후\"처럼 기간을 입력하면 날짜 투표 링크를 만들어드릴게요!"
+                "\"@스케쥴리 2주 후\"처럼 기간을 입력하면 날짜 투표 링크를 만들어드릴게요!"
         ));
     }
 
@@ -222,7 +239,8 @@ public class KakaoSkillController {
             return ResponseEntity.ok(KakaoResponse.simpleText("주차 선택 값을 확인하지 못했어요. 다시 선택해 주세요."));
         }
 
-        KakaoResponse response = kakaoWendyService.createVote(sessionKey, weeks, botGroupKey);
+        String botUserKey = request.getUserRequest().getUser().getId();
+        KakaoResponse response = kakaoWendyService.createVote(sessionKey, weeks, botGroupKey, botUserKey);
         return ResponseEntity.ok(response);
     }
 
@@ -246,6 +264,65 @@ public class KakaoSkillController {
         String sessionKey = getSessionKey(request);
         log.info("[Kakao Skill] REVOTE - sessionKey={}", sessionKey);
         return ResponseEntity.ok(kakaoWendyService.revote(sessionKey));
+    }
+
+    /**
+     * 독촉 알림 스킬 (전용 블록)
+     */
+    @Operation(summary = "독촉 알림")
+    @PostMapping("/notify/remind")
+    public ResponseEntity<KakaoResponse> handleRemind(@RequestBody KakaoRequest request) {
+        // 이벤트 발송 X
+        // 스킬 응답 텍스트로 바로 반환
+        String sessionKey = getSessionKey(request);
+        String botGroupKey = request.getBotGroupKey();
+        String timing = request.getParam("timing"); 
+
+        log.info("[Kakao Skill] REMIND - sessionKey={}, timing={}, botGroupKey={}", sessionKey, timing, botGroupKey);
+        return ResponseEntity.ok(kakaoWendyService.buildRemindResponse(sessionKey, timing));
+    }
+    // public ResponseEntity<KakaoResponse> handleRemind(@RequestBody KakaoRequest request) {
+    //     String sessionKey = getSessionKey(request);
+
+    //     String botGroupKey = request.getBotGroupKey();
+
+    //     String timing = request.getParam("timing"); // "30min", "2hour", "6hour", "12hour"
+
+    //     log.info("[Kakao Skill] REMIND - sessionKey={}, timing={}, botGroupKey={}", sessionKey, timing, botGroupKey);
+    //     log.info("[Kakao Skill RAW] request={}", request);
+        
+    //     try {
+    //         log.info("[RAW REQUEST] {}", objectMapper.writeValueAsString(request));
+    //     } catch (JsonProcessingException e) {
+    //         log.error("[RAW REQUEST] JSON 변환 실패", e);
+    //     }
+    
+    //     kakaoAsyncService.sendRemind(sessionKey, timing, botGroupKey); // ← 따로 빼기
+    //     return ResponseEntity.ok(kakaoWendyService.buildRemindResponse(sessionKey, timing));
+
+    //     // return ResponseEntity.ok(
+    //     //     KakaoResponse.simpleText("처리 중")
+    //     // );  
+    // }
+
+    /**
+     * 최후통첩 (24시간)
+     */
+    @PostMapping("/notify/final-notice")
+    public ResponseEntity<KakaoResponse> handleFinalNotice(@RequestBody KakaoRequest request) {
+        String sessionKey = getSessionKey(request);
+        log.info("[Kakao Skill] FINAL_NOTICE - sessionKey={}", sessionKey);
+        return ResponseEntity.ok(kakaoWendyService.buildFinalNoticeResponse(sessionKey));
+    }
+
+    /**
+     * 완료 (25시간)
+     */
+    @PostMapping("/notify/final")
+    public ResponseEntity<KakaoResponse> handleFinalize(@RequestBody KakaoRequest request) {
+        String sessionKey = getSessionKey(request);
+        log.info("[Kakao Skill] FINALIZE - sessionKey={}", sessionKey);
+        return ResponseEntity.ok(kakaoWendyService.buildCompletionResponse(sessionKey));
     }
 
     /**
@@ -317,5 +394,155 @@ public class KakaoSkillController {
             if (!s.isEmpty()) set.add(s);
         }
         return String.join(",", set);
+    }
+
+    @PostMapping("/time-poll")
+    public ResponseEntity<KakaoResponse> handleTimePoll(@RequestBody KakaoRequest request) {
+        String sessionKey = getSessionKey(request);
+        Long voteId = kakaoWendyService.getVoteIdBySessionKey(sessionKey);
+        
+        // 여기서 timePoll 생성 + 스케줄러 시작
+        String timePollUrl = kakaoWendyService.createTimePoll(sessionKey, voteId);
+        
+        return ResponseEntity.ok(KakaoResponse.builder()
+            .version("2.0")
+            .template(KakaoResponse.Template.builder()
+                .outputs(List.of(
+                    KakaoResponse.Output.builder()
+                        .textCard(KakaoResponse.BasicCard.builder()
+                            .title("그럼 이제 몇 시에 만날지 정해보죠!")
+                            .description("투표를 만들어드렸어요🙂")
+                            .buttons(List.of(
+                                KakaoResponse.Button.builder()
+                                    .label("투표하기")
+                                    .action("webLink")
+                                    .webLinkUrl(timePollUrl)
+                                    .build()
+                            ))
+                            .build())
+                        .build()
+                ))
+                .build())
+            .build());
+    }
+    @PostMapping("/time-poll/notify/remind")
+    public ResponseEntity<KakaoResponse> handleTimePollRemind(@RequestBody KakaoRequest request) {
+        String botGroupKey = request.getBotGroupKey();
+        String timing = request.getParam("timing");
+        
+        Long timePollId = kakaoWendyService.getTimePollIdByBotGroupKey(botGroupKey);
+        if (timePollId == null) {
+            return ResponseEntity.ok(KakaoResponse.simpleText("진행 중인 시간 투표가 없어요."));
+        }
+        
+        return ResponseEntity.ok(kakaoWendyService.buildTimeRemindResponse(timePollId, botGroupKey, timing));
+    }
+
+    @PostMapping("/time-poll/notify/final-notice")
+    public ResponseEntity<KakaoResponse> handleTimePollFinalNotice(@RequestBody KakaoRequest request) {
+        String botGroupKey = request.getBotGroupKey();
+        Long timePollId = kakaoWendyService.getTimePollIdByBotGroupKey(botGroupKey);
+        if (timePollId == null) {
+            return ResponseEntity.ok(KakaoResponse.simpleText("진행 중인 시간 투표가 없어요."));
+        }
+        return ResponseEntity.ok(kakaoWendyService.buildTimeFinalNoticeResponse(timePollId, botGroupKey));
+    }
+
+    @PostMapping("/time-poll/notify/status")
+    public ResponseEntity<KakaoResponse> handleTimePollStatus(@RequestBody KakaoRequest request) {
+        String botGroupKey = request.getBotGroupKey();
+        Long timePollId = kakaoWendyService.getTimePollIdByBotGroupKey(botGroupKey);
+
+        if (timePollId == null) {
+            return ResponseEntity.ok(KakaoResponse.simpleText("진행 중인 시간 투표가 없어요."));
+        }
+
+        TimePollStatusResponse status = timePollService.getStatus(timePollId);
+
+        // 아무도 안 투표
+        if (status.getSubmittedCount() == 0) {
+            return ResponseEntity.ok(KakaoResponse.simpleText(
+                "스케쥴리가 투표 현황을 공유드려요! :D\n\n엥 아직 아무도 투표를 안 했네요 :("
+            ));
+        }
+
+        // 현황 메시지 구성
+        StringBuilder sb = new StringBuilder();
+        sb.append("스케쥴리가 투표 현황을 공유드려요! :D\n\n");
+        sb.append("[").append(status.getConfirmedDate()).append(" ")
+            .append("LUNCH".equals(status.getPeriod().name()) ? "점심" : "저녁").append("]\n");
+        for (TimePollStatusResponse.EntryDto entry : status.getEntries()) {
+            sb.append(entry.getDisplayName()).append(": ")
+            .append(formatTime(entry.getSelectedTime())).append("\n");
+        }
+
+        return ResponseEntity.ok(KakaoResponse.simpleText(sb.toString().trim()));
+    }
+
+    private String formatTime(LocalTime time) {
+        int hour = time.getHour();
+        int minute = time.getMinute();
+        String suffix = hour >= 12 ? "오후 " : "오전 ";
+        int displayHour = hour > 12 ? hour - 12 : hour;
+        if (minute == 30) return suffix + displayHour + "시반";
+        if (minute == 0) return suffix + displayHour + "시";
+        return suffix + displayHour + "시 " + minute + "분";
+    }
+
+    @PostMapping("/time-poll/notify/finish")
+    public ResponseEntity<KakaoResponse> handleTimePollFinish(@RequestBody KakaoRequest request) {
+        String botGroupKey = request.getBotGroupKey();
+        Long timePollId = kakaoWendyService.getTimePollIdByBotGroupKey(botGroupKey);
+
+        if (timePollId == null) {
+            return ResponseEntity.ok(KakaoResponse.simpleText("진행 중인 시간 투표가 없어요."));
+        }
+
+
+        // finalize 보장
+        timePollService.finalize(timePollId);
+        kakaoTimePollScheduler.stopSchedule(timePollId); 
+
+        TimePollStatusResponse status = timePollService.getStatus(timePollId);
+        String confirmedDate = status.getConfirmedDate(); // "1월 28일 저녁" 형태
+        String finalizedTime = formatTime(status.getFinalizedTime()); // LocalTime → "6시"
+
+        if (finalizedTime == null) {
+            return ResponseEntity.ok(KakaoResponse.simpleText("아직 투표가 완료되지 않았어요."));
+        }
+
+        String message = "투표가 완료됐어요! :D\n\n"
+                + confirmedDate + " " + finalizedTime + "에 만나기로 정해졌어요🙂";
+
+        return ResponseEntity.ok(KakaoResponse.simpleText(message));
+    }
+
+    @PostMapping("/time-poll/notify/final-buttons")
+    public ResponseEntity<KakaoResponse> handleTimePollFinalButtons(@RequestBody KakaoRequest request) {
+        String botGroupKey = request.getBotGroupKey();
+        Long timePollId = kakaoWendyService.getTimePollIdByBotGroupKey(botGroupKey);
+
+        String timePollUrl = "https://schedulyy.netlify.app/time/" + timePollId;
+
+        return ResponseEntity.ok(KakaoResponse.builder()
+                .version("2.0")
+                .template(KakaoResponse.Template.builder()
+                        .outputs(List.of(
+                                KakaoResponse.Output.builder()
+                                        .textCard(KakaoResponse.BasicCard.builder()
+                                                .title("어떻게 하실 건가요? 🙂")
+                                                .buttons(List.of(
+                                                        KakaoResponse.messageButton("저도 그때 좋아요", "저도 그때 좋아요"),
+                                                        KakaoResponse.Button.builder()
+                                                                .label("투표할래요")
+                                                                .action("webLink")
+                                                                .webLinkUrl(timePollUrl)
+                                                                .build()
+                                                ))
+                                                .build())
+                                        .build()
+                        ))
+                        .build())
+                .build());
     }
 }

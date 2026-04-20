@@ -30,11 +30,12 @@ public class OpenApiConfig {
         SecurityRequirement securityRequirement = new SecurityRequirement().addList("Bearer Authentication");
 
         Server localServer= new Server().url("http://localhost:8080").description("Local 서버");
-        Server whendAppServer= new Server().url("https://whend.app").description("배포 서버");
+        Server tempServer = new Server().url("http://54.180.250.122:8080").description("임시 배포 서버");
+        Server whendAppServer= new Server().url("https://scheduly.xyz").description("배포 서버");
 
         return new OpenAPI()
                 .info(info)
-                .servers(List.of(localServer, whendAppServer))
+                .servers(List.of(localServer, tempServer, whendAppServer))
                 .components(new Components()
                         .addSecuritySchemes("bearerAuth", securityScheme))
                 .addSecurityItem(securityRequirement);

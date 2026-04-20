@@ -22,12 +22,12 @@ public class VoteService {
     private final SecureRandom rnd = new SecureRandom();
 
 
-    public VoteService(VoteRepository voteRepo, @Value("${app.base-url:http://whendy.netlify.app}") String baseUrl) {
+    public VoteService(VoteRepository voteRepo, @Value("${app.base-url:http://schedulyy.netlify.app}") String baseUrl) {
         this.voteRepo = voteRepo; this.baseUrl = baseUrl;
     }
 
 
-    public VoteDtos.VoteSummary create(VoteDtos.CreateVoteReq req) {
+    public VoteDtos.VoteSummary create(VoteDtos.CreateVoteReq req){
         //1. Vote c
         String code = genCode(8);
         Vote v = new Vote(req.name(), code);
@@ -43,7 +43,7 @@ public class VoteService {
             if (req.participantNames() != null && !req.participantNames().isEmpty()) {
                 for (String name : req.participantNames()) {
                     if (name != null && !name.isBlank()) {
-                        Participant p = new Participant(v, name.trim());
+                        Participant p = new Participant(v, name.trim(), null);
                         v.getParticipants().add(p);
                     }
                 }

@@ -29,6 +29,7 @@ public class KakaoRequest {
     public static class Chat {
         private String id;      // 채팅방 ID (botGroupKey)
         private String type;    // 채팅방 타입
+        private Map<String, String> properties;
     }
 
     @Getter
@@ -51,6 +52,7 @@ public class KakaoRequest {
         private String utterance;
         private String lang;
         private User user;
+        private Chat chat;
     }
 
     @Getter
@@ -153,13 +155,35 @@ public class KakaoRequest {
     /**
      * 그룹 채팅방 키 (botGroupKey) 조회
      */
+    // public String getBotGroupKey() {
+    //     if (chat == null) return null;
+    //     // properties.botGroupKey 우선
+    //     if (chat.getProperties() != null) {
+    //         String key = chat.getProperties().get("botGroupKey");
+    //         if (key != null && !key.isBlank()) return key;
+    //     }
+    //     // fallback: chat.id
+    //     return chat.getId();
+    // }
     public String getBotGroupKey() {
+        if (userRequest != null && userRequest.getChat() != null) {
+            Chat chat = userRequest.getChat();
+            if (chat.getProperties() != null) {
+                String key = chat.getProperties().get("botGroupKey");
+                if (key != null && !key.isBlank()) return key;
+            }
+            return chat.getId();
+        }
+        // 기존 최상위 chat fallback
         if (chat != null) {
+            if (chat.getProperties() != null) {
+                String key = chat.getProperties().get("botGroupKey");
+                if (key != null && !key.isBlank()) return key;
+            }
             return chat.getId();
         }
         return null;
     }
-
     /**
      * 그룹 채팅방 여부 확인
      */
