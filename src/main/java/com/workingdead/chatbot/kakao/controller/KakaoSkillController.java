@@ -456,10 +456,16 @@ public class KakaoSkillController {
         if (timePollId == null) {
             return ResponseEntity.ok(KakaoResponse.simpleText("진행 중인 시간 투표가 없어요."));
         }
-
-        TimePollStatusResponse status = timePollService.getStatus(timePollId);
-
-        // 아무도 안 투표
+        
+        TimePollStatusResponse status;
+        try {
+            status = timePollService.getStatus(timePollId);
+        } catch (IllegalArgumentException e) {
+            log.warn("[TimePoll] 상태 조회 실패: timePollId={}", timePollId);
+            return ResponseEntity.ok(KakaoResponse.simpleText("투표 정보를 찾을 수 없어요."));
+        }
+        
+        // 아무도 투표 안 했을 경우 
         if (status.getSubmittedCount() == 0) {
             return ResponseEntity.ok(KakaoResponse.simpleText(
                 "스케쥴리가 투표 현황을 공유드려요! :D\n\n엥 아직 아무도 투표를 안 했네요 :("
@@ -503,7 +509,14 @@ public class KakaoSkillController {
         timePollService.finalize(timePollId);
         kakaoTimePollScheduler.stopSchedule(timePollId); 
 
-        TimePollStatusResponse status = timePollService.getStatus(timePollId);
+        TimePollStatusResponse status;
+        try {
+            status = timePollService.getStatus(timePollId);
+        } catch (IllegalArgumentException e) {
+            log.warn("[TimePoll] 상태 조회 실패: timePollId={}", timePollId);
+            return ResponseEntity.ok(KakaoResponse.simpleText("투표 정보를 찾을 수 없어요."));
+        }
+        
         String confirmedDate = status.getConfirmedDate(); // "1월 28일 저녁" 형태
         String finalizedTime = formatTime(status.getFinalizedTime()); // LocalTime → "6시"
 

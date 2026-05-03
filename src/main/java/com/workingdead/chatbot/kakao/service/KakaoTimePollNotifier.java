@@ -100,20 +100,38 @@ public class KakaoTimePollNotifier {
         }
     }
 
+    // public void sendUltimatum(Long timePollId, String botGroupKey) {
+    //     try {
+    //         List<Participant> pending = timePollService.getPendingParticipants(timePollId);
+    //         if (pending.isEmpty()) return;
+
+    //         sendEventToGroup(botGroupKey, "final_T");
+    //         Thread.sleep(2000);
+    //         sendEventToGroup(botGroupKey, "final_T_buttons");
+    //         //kakaoTimePollScheduler.stopSchedule(timePollId);
+    //         log.info("[TimePollNotifier] Ultimatum sent: timePollId={}", timePollId);
+
+    //     } catch (Exception e) {
+    //         log.error("[TimePollNotifier] sendUltimatum failed: {}", e.getMessage());
+    //     }
+    // }
     public void sendUltimatum(Long timePollId, String botGroupKey) {
         try {
             List<Participant> pending = timePollService.getPendingParticipants(timePollId);
             if (pending.isEmpty()) return;
 
             sendEventToGroup(botGroupKey, "final_T");
-            Thread.sleep(2000);
-            sendEventToGroup(botGroupKey, "final_T_buttons");
-            //kakaoTimePollScheduler.stopSchedule(timePollId);
+            // Thread.sleep(2000) 제거 — final_T_buttons는 스케줄러에서 별도 등록
             log.info("[TimePollNotifier] Ultimatum sent: timePollId={}", timePollId);
 
         } catch (Exception e) {
             log.error("[TimePollNotifier] sendUltimatum failed: {}", e.getMessage());
         }
+    }
+
+    // 추가
+    public void sendUltimatumButtons(String botGroupKey) {
+        sendEventToGroup(botGroupKey, "final_T_buttons");
     }
 
     public void finalizeIfNoResponse(Long timePollId, String botGroupKey) {

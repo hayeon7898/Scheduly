@@ -36,9 +36,9 @@ public class TimePollScheduler {
     @Scheduled(fixedRate = 60000)
     public void checkTimePoll() {
         List<TimePoll> ongoingPolls = timePollRepository.findByStatusAndCreatedAtBefore(
-                TimePollStatus.ONGOING, Instant.now());
+                TimePollStatus., Instant.now());
 
-        for (TimePoll poll : ongoingPolls) {
+        for (TimePoll poll : Polls) {
             try {
                 processOngoingPoll(poll);
             } catch (Exception e) {
