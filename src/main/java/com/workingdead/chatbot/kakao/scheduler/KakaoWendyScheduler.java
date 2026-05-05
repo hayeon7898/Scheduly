@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import com.workingdead.chatbot.kakao.service.KakaoNotifier;
+import com.workingdead.chatbot.kakao.service.KakaoWendyService;
 import com.workingdead.enums.VoteStatus;
 import com.workingdead.meet.entity.Vote;
 import com.workingdead.meet.repository.VoteRepository;
@@ -29,11 +30,13 @@ public class KakaoWendyScheduler {
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private final KakaoNotifier notifier;
     private final VoteRepository voteRepository;
+    private final KakaoWendyService kakaoWendyService;
     private final Map<String, List<ScheduledFuture<?>>> userTasks = new ConcurrentHashMap<>();
 
-    public KakaoWendyScheduler(@Lazy KakaoNotifier notifier, VoteRepository voteRepository) {
+    public KakaoWendyScheduler(@Lazy KakaoNotifier notifier, VoteRepository voteRepository, @Lazy KakaoWendyService kakaoWendyService) {
         this.notifier = notifier;
         this.voteRepository = voteRepository;
+        this.kakaoWendyService = kakaoWendyService;
     }
 
     @PostConstruct
@@ -48,6 +51,8 @@ public class KakaoWendyScheduler {
                 continue;
             }
             restoreSchedule(vote, botGroupKey);
+            // 인메모리 맵 복구
+            kakaoWendyService.restoreVoteMapping(vote.getId(), botGroupKey);
         }
     }
 

@@ -538,6 +538,9 @@ public class KakaoSkillController {
     public ResponseEntity<KakaoResponse> handleTimePollFinalButtons(@RequestBody KakaoRequest request) {
         String botGroupKey = request.getBotGroupKey();
         Long timePollId = kakaoWendyService.getTimePollIdByBotGroupKey(botGroupKey);
+        if (timePollId == null) {
+            return ResponseEntity.ok(KakaoResponse.simpleText("진행 중인 시간 투표가 없어요."));
+        }
 
         String timePollUrl = "https://schedulyy.netlify.app/time/" + timePollId;
 
