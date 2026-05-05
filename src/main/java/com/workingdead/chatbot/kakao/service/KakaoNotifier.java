@@ -7,7 +7,9 @@ import com.workingdead.meet.dto.VoteResultDtos.RankingRes;
 import com.workingdead.meet.dto.VoteResultDtos.VoteResultRes;
 import com.workingdead.meet.service.ParticipantService;
 import com.workingdead.meet.service.VoteResultService;
+import com.workingdead.meet.service.VoteService;
 import com.workingdead.chatbot.kakao.scheduler.KakaoWendyScheduler;
+
 import java.time.Duration;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +45,7 @@ public class KakaoNotifier {
     private final RestTemplate kakaoRestTemplate;
     private final ObjectMapper objectMapper;
     private final KakaoWendyScheduler kakaoWendyScheduler;
+    private final VoteService voteService;
 
     public KakaoNotifier(
             KakaoConfig kakaoConfig,
@@ -52,7 +55,8 @@ public class KakaoNotifier {
             ParticipantService participantService,
             RestTemplate kakaoRestTemplate,
             ObjectMapper objectMapper,
-            @Lazy KakaoWendyScheduler kakaoWendyScheduler) {
+            @Lazy KakaoWendyScheduler kakaoWendyScheduler,
+            VoteService voteService) {
         this.kakaoConfig = kakaoConfig;
         this.kakaoWendyService = kakaoWendyService;
         this.kakaoBotApiClient = kakaoBotApiClient;
@@ -61,6 +65,7 @@ public class KakaoNotifier {
         this.kakaoRestTemplate = kakaoRestTemplate;
         this.objectMapper = objectMapper;
         this.kakaoWendyScheduler = kakaoWendyScheduler;
+        this.voteService = voteService;
     }
 
     // ========== Event API (그룹 채팅방 메시지 발송) ==========
@@ -165,9 +170,16 @@ public class KakaoNotifier {
             if (voteId == null) return;
 
             List<String> nonVoters = getNonVoterNames(voteId);
-            if (nonVoters.isEmpty()) return; // 이미 다 했으면 확정 처리 X
+            if (nonVoters.isEmpty()) return;
 
+            // 1. VoteStatus FINALIZED로 변경
+            voteService.finalize(voteId);  // ← 추가
+
+            // 2. 그룹 메시지 발송
             sendToGroupIfPossible(voteId, "finish_D");
+
+            // 3. 스케줄 중지
+            kakaoWendyScheduler.stopSchedule(sessionKey);  // ← 추가
 
         } catch (Exception e) {
             log.error("[Kakao Notifier] finalizeIfNoResponse failed: {}", e.getMessage(), e);

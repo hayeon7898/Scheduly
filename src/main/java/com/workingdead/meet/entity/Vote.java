@@ -51,6 +51,8 @@ public class Vote {
     public Vote(String name, String code) {
         this.name = name;
         this.code = code;
+        this.status = VoteStatus.ONGOING;
+        this.createdAt = Instant.now();
     }
 
     public void setDateRange(LocalDate start, LocalDate end) {
