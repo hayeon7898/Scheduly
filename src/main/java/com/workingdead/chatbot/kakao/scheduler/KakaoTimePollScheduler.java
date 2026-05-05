@@ -37,43 +37,43 @@ public class KakaoTimePollScheduler {
         // 독촉: 30분, 2시간, 6시간, 12시간 (블로킹 방지)
         list.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(timePollId, botGroupKey, "30min"),
-                30, TimeUnit.MINUTES
+                4, TimeUnit.MINUTES
         ));
         list.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(timePollId, botGroupKey, "2hour"),
-                2, TimeUnit.HOURS
+                5, TimeUnit.MINUTES
         ));
         list.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(timePollId, botGroupKey, "6hour"),
-                6, TimeUnit.HOURS
+                6, TimeUnit.MINUTES
         ));
         list.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(timePollId, botGroupKey, "12hour"),
-                12, TimeUnit.HOURS
+                7, TimeUnit.MINUTES
         ));
 
         // 최후통첩: 24시간 (블로킹 방지)
         list.add(scheduler.schedule(
                 () -> notifier.sendUltimatum(timePollId, botGroupKey),
-                24, TimeUnit.HOURS
+                8, TimeUnit.MINUTES
         ));
 
         // [FIXED] final_T_buttons: 최후통첩 2초 후 (논블로킹)
         list.add(scheduler.schedule(
                 () -> notifier.sendUltimatumButtons(botGroupKey),
-                24 * 60 * 60 + 2, TimeUnit.SECONDS  // 24시간 2초
+                8* 60 + 2, TimeUnit.SECONDS  // 24시간 2초
         ));
 
         // 최후통첩 후 60분 → 자동 확정 (블로킹 방지)
         list.add(scheduler.schedule(
                 () -> notifier.finalizeIfNoResponse(timePollId, botGroupKey),
-                25, TimeUnit.HOURS
+                9, TimeUnit.MINUTES
         ));
 
-        // [FIXED] 5분마다 전원 투표 완료 체크 (블로킹 방지)
+        // [FIXED] 1분마다 전원 투표 완료 체크 (블로킹 방지)
         list.add(scheduler.scheduleAtFixedRate(
                 () -> notifier.checkAllVoted(timePollId, botGroupKey),
-                5, 5, TimeUnit.MINUTES
+                1, 1, TimeUnit.MINUTES
         ));
 
         tasks.put(timePollId, list);
