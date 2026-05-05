@@ -1,4 +1,4 @@
-package com.workingdead.meet.entity;
+package com.workingdead.enums;
 
 public enum Period {
     LUNCH,

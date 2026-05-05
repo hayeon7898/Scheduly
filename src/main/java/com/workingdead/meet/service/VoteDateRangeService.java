@@ -1,29 +1,37 @@
 package com.workingdead.meet.service;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.workingdead.enums.Period;
 import com.workingdead.meet.dto.VoteDateRangeDtos.DateSlotDto;
 import com.workingdead.meet.dto.VoteDateRangeDtos.SlotDto;
-import com.workingdead.meet.entity.Period;
 import com.workingdead.meet.entity.ParticipantSelection;
 import com.workingdead.meet.entity.Vote;
 import com.workingdead.meet.repository.ParticipantSelectionRepository;
 import com.workingdead.meet.repository.VoteRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 @Service
 @Transactional(readOnly = true)
 public class VoteDateRangeService {
+
     private final VoteRepository voteRepository;
     private final ParticipantSelectionRepository selectionRepository;
 
     public VoteDateRangeService(VoteRepository voteRepository,
-                                ParticipantSelectionRepository selectionRepository) {
+            ParticipantSelectionRepository selectionRepository) {
         this.voteRepository = voteRepository;
         this.selectionRepository = selectionRepository;
     }

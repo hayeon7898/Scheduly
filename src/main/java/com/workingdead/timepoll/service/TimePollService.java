@@ -320,4 +320,9 @@ public class TimePollService {
     public Instant getTimePollCreatedAt(Long timePollId) {
         return findById(timePollId).getCreatedAt();
     }
+    public void updateBotGroupKey(Long timePollId, String botGroupKey) {
+        TimePoll timePoll = findById(timePollId);
+        timePoll.setBotGroupKey(botGroupKey);
+        timePollRepository.save(timePoll);
+    }
 }

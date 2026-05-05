@@ -2,6 +2,7 @@ package com.workingdead.meet.repository;
 
 import com.workingdead.meet.entity.TimePoll;
 import com.workingdead.meet.entity.TimePollStatus;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +15,8 @@ public interface TimePollRepository extends JpaRepository<TimePoll, Long> {
 
     // Vote ID로 시간 투표 조회
     Optional<TimePoll> findByVoteId(Long voteId);
+    // 진행 중인 시간 투표 전체 조회
+    List<TimePoll> findByStatus(TimePollStatus status);
 
     // 진행 중인 투표 중 특정 시각 이전에 생성된 것들 (스케줄러용)
     List<TimePoll> findByStatusAndCreatedAtBefore(TimePollStatus status, Instant before);

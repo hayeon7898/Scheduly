@@ -848,7 +848,8 @@ public class KakaoWendyService {
 
     public String createTimePoll(String sessionKey, Long voteId) {
         String botGroupKey = getBotGroupKeyByVoteId(voteId);
-    Long existingTimePollId = groupTimePollId.get(botGroupKey);
+        Long existingTimePollId = groupTimePollId.get(botGroupKey);
+
         if (existingTimePollId != null) {
             kakaoTimePollScheduler.stopSchedule(existingTimePollId);
             timePollService.delete(existingTimePollId);  // delete 메서드 필요
@@ -878,6 +879,9 @@ public class KakaoWendyService {
         req.setPeriod(Period.valueOf(top.period()));
 
         TimePoll timePoll = timePollService.create(req);
+        if (botGroupKey != null) {
+            timePollService.updateBotGroupKey(timePoll.getId(), botGroupKey); //DB에 저장
+        }
         // 스케줄러 시작
         if (botGroupKey != null) {
             groupTimePollId.put(botGroupKey, timePoll.getId());
@@ -1036,6 +1040,7 @@ public class KakaoWendyService {
             if (voteId != null) {
                 groupVoteId.put(botGroupKey, voteId);
                 voteIdToGroupKey.put(voteId, botGroupKey);
+                voteService.updateBotGroupKey(voteId, botGroupKey); // DB에 저장
                 log.info("[Kakao When:D] Group vote mapping: botGroupKey={}, voteId={}", botGroupKey, voteId);
 
                 // 채팅방 멤버 전원 participant로 등록 ← 여기로 이동

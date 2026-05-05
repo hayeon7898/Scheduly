@@ -23,35 +23,28 @@ public class TimePoll {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 어떤 Vote(날짜 투표)에서 파생됐는지
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "vote_id", nullable = false)
     private Vote vote;
 
-    // 확정된 날짜 (날짜 투표 결과)
     @Column(name = "confirmed_date", nullable = false)
-    private String confirmedDate; // "1월 28일"
+    private String confirmedDate;
 
-    // 시간대 (아침/점심/저녁 등)
     @Enumerated(EnumType.STRING)
     @Column(name = "period")
-    private Period period; // "저녁"
+    private Period period;
 
-    // 투표 상태
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
     private TimePollStatus status = TimePollStatus.ONGOING;
 
-    // 최종 확정된 시간 (투표 완료 후)
     @Column(name = "finalized_time")
     private LocalTime finalizedTime;
 
-    // 최후통첩 발송 시각
     @Column(name = "ultimatum_sent_at")
     private Instant ultimatumSentAt;
 
-    // 마지막 독촉 단계 (0=안함, 1=30분, 2=2시간, 3=6시간, 4=12시간)
     @Column(name = "last_reminder_step")
     @Builder.Default
     private Integer lastReminderStep = 0;
@@ -60,7 +53,10 @@ public class TimePoll {
     @Builder.Default
     private Instant createdAt = Instant.now();
 
-    // 개별 투표 응답들
+    // 추가
+    @Column(name = "bot_group_key")
+    private String botGroupKey;
+
     @OneToMany(mappedBy = "timePoll", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<TimePollEntry> entries = new ArrayList<>();

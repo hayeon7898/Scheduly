@@ -1,10 +1,16 @@
 package com.workingdead.chatbot.kakao.scheduler;
 
 import com.workingdead.chatbot.kakao.service.KakaoTimePollNotifier;
+import com.workingdead.meet.entity.TimePoll;
+import com.workingdead.meet.entity.TimePollStatus;
+import com.workingdead.meet.repository.TimePollRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -13,13 +19,95 @@ import java.util.concurrent.*;
 @Slf4j
 public class KakaoTimePollScheduler {
 
+//     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+//     private final KakaoTimePollNotifier notifier;
+//     private final Map<Long, List<ScheduledFuture<?>>> tasks = new ConcurrentHashMap<>();
+
+//     public KakaoTimePollScheduler(@Lazy KakaoTimePollNotifier notifier) {
+//         this.notifier = notifier;
+//     }
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private final KakaoTimePollNotifier notifier;
+    private final TimePollRepository timePollRepository;
     private final Map<Long, List<ScheduledFuture<?>>> tasks = new ConcurrentHashMap<>();
 
-    public KakaoTimePollScheduler(@Lazy KakaoTimePollNotifier notifier) {
+    public KakaoTimePollScheduler(
+            @Lazy KakaoTimePollNotifier notifier,
+            TimePollRepository timePollRepository) {
         this.notifier = notifier;
+        this.timePollRepository = timePollRepository;
     }
+
+    @PostConstruct
+    public void restoreSchedules() {
+        List<TimePoll> ongoingPolls = timePollRepository.findByStatus(TimePollStatus.ONGOING);
+        log.info("[TimePollScheduler] Restoring {} schedules on startup", ongoingPolls.size());
+
+        for (TimePoll poll : ongoingPolls) {
+            String botGroupKey = poll.getBotGroupKey();
+            if (botGroupKey == null || botGroupKey.isBlank()) {
+                log.warn("[TimePollScheduler] No botGroupKey for timePollId={}. Skip.", poll.getId());
+                continue;
+            }
+            restoreSchedule(poll, botGroupKey);
+        }
+    }
+
+    private void restoreSchedule(TimePoll poll, String botGroupKey) {
+        Long timePollId = poll.getId();
+        Instant createdAt = poll.getCreatedAt();
+        long elapsed = Duration.between(createdAt, Instant.now()).getSeconds();
+
+        CopyOnWriteArrayList<ScheduledFuture<?>> list = new CopyOnWriteArrayList<>();
+
+        // 각 스케줄 타이밍 (초 단위)
+        scheduleIfRemaining(list, elapsed, 3 * 60,
+                () -> notifier.shareTimePollStatus(timePollId, botGroupKey));
+
+        scheduleIfRemaining(list, elapsed, 30 * 60,
+                () -> notifier.remindNonVoters(timePollId, botGroupKey, "30min"));
+
+        scheduleIfRemaining(list, elapsed, 2 * 3600,
+                () -> notifier.remindNonVoters(timePollId, botGroupKey, "2hour"));
+
+        scheduleIfRemaining(list, elapsed, 6 * 3600,
+                () -> notifier.remindNonVoters(timePollId, botGroupKey, "6hour"));
+
+        scheduleIfRemaining(list, elapsed, 12 * 3600,
+                () -> notifier.remindNonVoters(timePollId, botGroupKey, "12hour"));
+
+        scheduleIfRemaining(list, elapsed, 24 * 3600,
+                () -> notifier.sendUltimatum(timePollId, botGroupKey));
+
+        scheduleIfRemaining(list, elapsed, 24 * 3600 + 2,
+                () -> notifier.sendUltimatumButtons(botGroupKey));
+
+        scheduleIfRemaining(list, elapsed, 25 * 3600,
+                () -> notifier.finalizeIfNoResponse(timePollId, botGroupKey));
+
+        // 전원 투표 완료 체크는 항상 등록
+        list.add(scheduler.scheduleAtFixedRate(
+                () -> notifier.checkAllVoted(timePollId, botGroupKey),
+                1, 1, TimeUnit.MINUTES
+        ));
+
+        tasks.put(timePollId, list);
+        log.info("[TimePollScheduler] Restored: timePollId={}, elapsed={}s", timePollId, elapsed);
+    }
+
+    private void scheduleIfRemaining(
+            List<ScheduledFuture<?>> list,
+            long elapsedSeconds,
+            long targetSeconds,
+            Runnable task) {
+        long remaining = targetSeconds - elapsedSeconds;
+        if (remaining > 0) {
+            list.add(scheduler.schedule(task, remaining, TimeUnit.SECONDS));
+        } else {
+            log.info("[TimePollScheduler] Skipped already-passed schedule: target={}s", targetSeconds);
+        }
+    }
+
     public void startSchedule(Long timePollId, String botGroupKey) {
         if (tasks.containsKey(timePollId)) {
                 log.warn("[TimePollScheduler] Already scheduled. Skip. timePollId={}", timePollId);
