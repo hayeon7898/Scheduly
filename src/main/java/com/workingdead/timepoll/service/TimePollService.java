@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.LocalDate;
-import java.time.LocalDateTime; 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -50,8 +50,7 @@ public class TimePollService {
     }
 
     /**
-     * 투표 페이지 조회 (API #2)
-     * participantId로 해당 유저의 투표 여부 + 선택값 포함
+     * 투표 페이지 조회 (API #2) participantId로 해당 유저의 투표 여부 + 선택값 포함
      */
     public TimePollResponse getTimePoll(Long pollId, Long participantId) {
         TimePoll timePoll = findById(pollId);
@@ -83,9 +82,7 @@ public class TimePollService {
     }
 
     /**
-     * 투표 제출 (API #3)
-     * 이미 투표했으면 수정, 아니면 새로 생성
-     * 전원 투표 완료 시 자동 확정 트리거
+     * 투표 제출 (API #3) 이미 투표했으면 수정, 아니면 새로 생성 전원 투표 완료 시 자동 확정 트리거
      */
     @Transactional
     public TimePollStatusResponse submit(Long pollId, TimePollSubmitRequest request) {
@@ -124,8 +121,7 @@ public class TimePollService {
     }
 
     /**
-     * 투표 현황 조회 (API #4)
-     * 늦은 시간순 정렬
+     * 투표 현황 조회 (API #4) 늦은 시간순 정렬
      */
     public TimePollStatusResponse getStatus(Long pollId) {
         TimePoll timePoll = findById(pollId);
@@ -147,9 +143,9 @@ public class TimePollService {
         List<TimePollStatusResponse.EntryDto> entryDtos = entries.stream()
                 .sorted(Comparator.comparing(TimePollEntry::getSelectedTime).reversed())
                 .map(e -> TimePollStatusResponse.EntryDto.builder()
-                        .displayName(e.getParticipant().getDisplayName())
-                        .selectedTime(e.getSelectedTime())
-                        .build())
+                .displayName(e.getParticipant().getDisplayName())
+                .selectedTime(e.getSelectedTime())
+                .build())
                 .collect(Collectors.toList());
 
         return TimePollStatusResponse.builder()
@@ -167,8 +163,7 @@ public class TimePollService {
     }
 
     /**
-     * "저도 그때 좋아요" 수락 (API #5)
-     * 최다 득표 시간으로 자동 배정. 전원 완료 시에만 확정.
+     * "저도 그때 좋아요" 수락 (API #5) 최다 득표 시간으로 자동 배정. 전원 완료 시에만 확정.
      */
     @Transactional
     public TimePollStatusResponse accept(Long pollId, Long participantId) {
@@ -208,8 +203,7 @@ public class TimePollService {
     }
 
     /**
-     * 투표 확정 (API #6)
-     * 최다 득표 시간으로 확정
+     * 투표 확정 (API #6) 최다 득표 시간으로 확정
      */
     @Transactional
     public TimePoll finalize(Long pollId) {
@@ -264,7 +258,6 @@ public class TimePollService {
     }
 
     // === private ===
-
     private TimePoll findById(Long pollId) {
         return timePollRepository.findById(pollId)
                 .orElseThrow(() -> new IllegalArgumentException("TimePoll not found: " + pollId));
@@ -286,6 +279,7 @@ public class TimePollService {
                 .map(Map.Entry::getKey)
                 .orElseThrow();
     }
+
     public List<Participant> getPendingParticipants(Long pollId) {
         TimePoll timePoll = findById(pollId);
         List<Participant> allParticipants = timePoll.getVote().getParticipants();
@@ -300,26 +294,32 @@ public class TimePollService {
                 .filter(p -> p.getKakaoId() != null && !p.getKakaoId().isBlank())
                 .collect(Collectors.toList());
     }
+
     public Instant getCreatedAt(Long voteId) {
         return voteRepository.findById(voteId)
                 .orElseThrow(() -> new NoSuchElementException("vote not found"))
                 .getCreatedAt();
     }
+
     public String getTopTimeLabel(Long pollId) {
         List<TimePollEntry> entries = timePollEntryRepository.findByTimePollId(pollId);
         if (entries.isEmpty()) {
-                return "미정";
+            return "미정";
         }
 
         LocalTime topTime = getMostVotedTime(pollId);
         return topTime.format(DateTimeFormatter.ofPattern("HH:mm"));
     }
+
     public void delete(Long timePollId) {
         timePollRepository.deleteById(timePollId);
     }
+
     public Instant getTimePollCreatedAt(Long timePollId) {
         return findById(timePollId).getCreatedAt();
     }
+
+    @Transactional
     public void updateBotGroupKey(Long timePollId, String botGroupKey) {
         TimePoll timePoll = findById(timePollId);
         timePoll.setBotGroupKey(botGroupKey);
