@@ -33,7 +33,10 @@ public class KakaoWendyScheduler {
     private final KakaoWendyService kakaoWendyService;
     private final Map<String, List<ScheduledFuture<?>>> userTasks = new ConcurrentHashMap<>();
 
-    public KakaoWendyScheduler(@Lazy KakaoNotifier notifier, VoteRepository voteRepository, @Lazy KakaoWendyService kakaoWendyService) {
+    public KakaoWendyScheduler(
+            @Lazy KakaoNotifier notifier,
+            VoteRepository voteRepository,
+            @Lazy KakaoWendyService kakaoWendyService) {
         this.notifier = notifier;
         this.voteRepository = voteRepository;
         this.kakaoWendyService = kakaoWendyService;
@@ -128,37 +131,37 @@ public class KakaoWendyScheduler {
         // 테스트용 - 나중에 30분으로 되돌리기!
         tasks.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(sessionKey, "30min"),
-                5, TimeUnit.MINUTES // 30 → 1
+                30, TimeUnit.MINUTES // 30 → 1
         ));
         tasks.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(sessionKey, "2hour"),
-                6, TimeUnit.MINUTES
+                2, TimeUnit.HOURS
         ));
         tasks.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(sessionKey, "6hour"),
-                7, TimeUnit.MINUTES
+                6, TimeUnit.HOURS
         ));
         tasks.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(sessionKey, "12hour"),
-                8, TimeUnit.MINUTES
+                12, TimeUnit.HOURS
         ));
 
         // 3) 최후통첩: 24시간
         tasks.add(scheduler.schedule(
                 () -> notifier.sendFinalNotice(sessionKey),
-                9, TimeUnit.MINUTES
+                24, TimeUnit.HOURS
         ));
 
         // 4) 최후통첩 후 60분 내 미응답 시 확정
         tasks.add(scheduler.schedule(
                 () -> notifier.finalizeIfNoResponse(sessionKey),
-                10, TimeUnit.MINUTES
+                25, TimeUnit.HOURS
         ));
 
-        // 5) 전원 투표 완료 체크 (5분마다)
+        // 5) 전원 투표 완료 체크 (1분마다)
         tasks.add(scheduler.scheduleAtFixedRate(
                 () -> notifier.checkAllVoted(sessionKey),
-                5, 5, TimeUnit.MINUTES
+                1, 1, TimeUnit.MINUTES
         ));
 
         userTasks.put(sessionKey, tasks);

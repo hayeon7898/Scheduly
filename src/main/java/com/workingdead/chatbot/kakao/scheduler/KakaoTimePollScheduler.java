@@ -130,37 +130,37 @@ public class KakaoTimePollScheduler {
         // 독촉: 30분, 2시간, 6시간, 12시간 (블로킹 방지)
         list.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(timePollId, botGroupKey, "30min"),
-                4, TimeUnit.MINUTES
+                30, TimeUnit.MINUTES
         ));
         list.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(timePollId, botGroupKey, "2hour"),
-                5, TimeUnit.MINUTES
+                2, TimeUnit.HOURS
         ));
         list.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(timePollId, botGroupKey, "6hour"),
-                6, TimeUnit.MINUTES
+                6, TimeUnit.HOURS
         ));
         list.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(timePollId, botGroupKey, "12hour"),
-                7, TimeUnit.MINUTES
+                12, TimeUnit.HOURS
         ));
 
         // 최후통첩: 24시간 (블로킹 방지)
         list.add(scheduler.schedule(
                 () -> notifier.sendUltimatum(timePollId, botGroupKey),
-                8, TimeUnit.MINUTES
+                24, TimeUnit.HOURS
         ));
 
         // [FIXED] final_T_buttons: 최후통첩 2초 후 (논블로킹)
         list.add(scheduler.schedule(
                 () -> notifier.sendUltimatumButtons(botGroupKey),
-                8 * 60 + 2, TimeUnit.SECONDS // 24시간 2초
+                24 * 60 * 60 + 2, TimeUnit.SECONDS // 24시간 2초
         ));
 
         // 최후통첩 후 60분 → 자동 확정 (블로킹 방지)
         list.add(scheduler.schedule(
                 () -> notifier.finalizeIfNoResponse(timePollId, botGroupKey),
-                9, TimeUnit.MINUTES
+                25, TimeUnit.HOURS
         ));
 
         // [FIXED] 1분마다 전원 투표 완료 체크 (블로킹 방지)
