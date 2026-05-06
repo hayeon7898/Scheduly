@@ -28,9 +28,8 @@ import java.util.stream.Collectors;
 /**
  * 카카오톡 알림 서비스
  *
- * 카카오 Bot API를 통해 그룹 채팅방에 이벤트 메시지를 전송합니다.
- * - Event API: 그룹 채팅방에 Push 메시지 전송
- * - 개인챗은 스킬 응답으로만 메시지 전송 가능 (Pull 방식)
+ * 카카오 Bot API를 통해 그룹 채팅방에 이벤트 메시지를 전송합니다. - Event API: 그룹 채팅방에 Push 메시지 전송 -
+ * 개인챗은 스킬 응답으로만 메시지 전송 가능 (Pull 방식)
  */
 @Service
 // @RequiredArgsConstructor
@@ -69,12 +68,11 @@ public class KakaoNotifier {
     }
 
     // ========== Event API (그룹 채팅방 메시지 발송) ==========
-
     /**
      * 그룹 채팅방에 이벤트 메시지 발송
      *
      * @param botGroupKey 채팅방 키
-     * @param eventName   관리자센터에 등록된 이벤트 블록 이름
+     * @param eventName 관리자센터에 등록된 이벤트 블록 이름
      */
     public void sendEventToGroup(String botGroupKey, String eventName) {
         try {
@@ -83,10 +81,8 @@ public class KakaoNotifier {
                 return;
             }
 
-            
-
-            KakaoBotApiClient.EventResponse response =
-                    kakaoBotApiClient.sendEventMessage(botGroupKey, eventName);
+            KakaoBotApiClient.EventResponse response
+                    = kakaoBotApiClient.sendEventMessage(botGroupKey, eventName);
             log.info("[Kakao Notifier] Event sent: botGroupKey={}, eventName={}, taskId={}",
                     botGroupKey, eventName, response.getTaskId());
 
@@ -101,10 +97,14 @@ public class KakaoNotifier {
     public void shareVoteStatus(String sessionKey) {
         try {
             Long voteId = kakaoWendyService.getVoteIdBySessionKey(sessionKey);
-            if (voteId == null) return;
+            if (voteId == null) {
+                return;
+            }
 
             LocalDateTime createdAt = kakaoWendyService.getVoteCreatedAtBySessionKey(sessionKey);
-            if (createdAt == null) return;
+            if (createdAt == null) {
+                return;
+            }
 
             long elapsedSeconds = Duration.between(createdAt, LocalDateTime.now()).getSeconds();
 
@@ -112,14 +112,13 @@ public class KakaoNotifier {
             long submittedCount = statuses.stream().filter(s -> Boolean.TRUE.equals(s.submitted())).count();
             long totalCount = statuses.size();
 
-            log.info("elapsedSeconds={}, submittedCount={}, totalCount={}", elapsedSeconds, submittedCount, totalCount);    
+            log.info("elapsedSeconds={}, submittedCount={}, totalCount={}", elapsedSeconds, submittedCount, totalCount);
 
             // 참가자 자체가 없는 비정상 케이스(생성 꼬임 등) 방어
             if (totalCount == 0) {
                 log.warn("[Kakao Notifier] No participants found for voteId={}", voteId);
                 return;
             }
-
 
             boolean allSubmitted = totalCount > 0 && submittedCount == totalCount;
             boolean majoritySubmitted = totalCount > 0 && submittedCount * 2 >= totalCount; // 과반(>=)
@@ -144,7 +143,6 @@ public class KakaoNotifier {
                 sendToGroupIfPossible(voteId, "finish_D");
             }
 
-
         } catch (Exception e) {
             log.error("[Kakao Notifier] Failed to share vote status: {}", e.getMessage());
         }
@@ -153,11 +151,14 @@ public class KakaoNotifier {
     public void sendFinalNotice(String sessionKey) {
         try {
             Long voteId = kakaoWendyService.getVoteIdBySessionKey(sessionKey);
-            if (voteId == null) return;
+            if (voteId == null) {
+                return;
+            }
 
             List<String> nonVoters = getNonVoterNames(voteId);
-            if (nonVoters.isEmpty()) return; // 미투표자 없으면 전송 X
-
+            if (nonVoters.isEmpty()) {
+                return; // 미투표자 없으면 전송 X
+            }
             sendToGroupIfPossible(voteId, "final_D");
         } catch (Exception e) {
             log.error("[Kakao Notifier] sendFinalNotice failed: {}", e.getMessage(), e);
@@ -167,10 +168,14 @@ public class KakaoNotifier {
     public void finalizeIfNoResponse(String sessionKey) {
         try {
             Long voteId = kakaoWendyService.getVoteIdBySessionKey(sessionKey);
-            if (voteId == null) return;
+            if (voteId == null) {
+                return;
+            }
 
             List<String> nonVoters = getNonVoterNames(voteId);
-            if (nonVoters.isEmpty()) return;
+            if (nonVoters.isEmpty()) {
+                return;
+            }
 
             // 1. VoteStatus FINALIZED로 변경
             voteService.finalize(voteId);  // ← 추가
@@ -188,7 +193,7 @@ public class KakaoNotifier {
 
     private void sendToGroupIfPossible(Long voteId, String eventName) {
         String botGroupKey = kakaoWendyService.getBotGroupKeyByVoteId(voteId);
-    
+
         if (botGroupKey != null && !botGroupKey.isBlank()) {
             sendEventToGroup(botGroupKey, eventName);
         } else {
@@ -213,14 +218,19 @@ public class KakaoNotifier {
                 return;
             }
 
-
             String eventName = switch (timing == null ? "DEFAULT" : timing) {
-                case "3min" -> "status_nobody_voted";
-                case "30min" -> "remind_D_30M";
-                case "2hour" -> "remind_D_2H";
-                case "6hour" -> "remind_D_6H";
-                case "12hour" -> "remind_D_12H";
-                default -> "remind_D_30M";
+                case "3min" ->
+                    "status_nobody_voted";
+                case "30min" ->
+                    "remind_D_30M";
+                case "2hour" ->
+                    "remind_D_2H";
+                case "6hour" ->
+                    "remind_D_6H";
+                case "12hour" ->
+                    "remind_D_12H";
+                default ->
+                    "remind_D_30M";
             };
 
             // botGroupKey 조회 (그룹챗인 경우에만 이벤트 발송)
@@ -252,10 +262,14 @@ public class KakaoNotifier {
 
         for (RankingRes ranking : result.rankings()) {
             String medal = switch (ranking.rank()) {
-                case 1 -> "🥇";
-                case 2 -> "🥈";
-                case 3 -> "🥉";
-                default -> "  ";
+                case 1 ->
+                    "🥇";
+                case 2 ->
+                    "🥈";
+                case 3 ->
+                    "🥉";
+                default ->
+                    "  ";
             };
 
             String dayLabel = getDayLabel(ranking.date().getDayOfWeek());
@@ -295,7 +309,9 @@ public class KakaoNotifier {
     public void checkAllVoted(String sessionKey) {
         try {
             Long voteId = kakaoWendyService.getVoteIdBySessionKey(sessionKey);
-            if (voteId == null) return;
+            if (voteId == null) {
+                return;
+            }
 
             List<ParticipantStatusRes> statuses = participantService.getParticipantStatusByVoteId(voteId);
             long submitted = statuses.stream().filter(s -> Boolean.TRUE.equals(s.submitted())).count();
@@ -303,6 +319,7 @@ public class KakaoNotifier {
 
             if (total > 0 && submitted == total) {
                 log.info("[Kakao Notifier] All voted! sessionKey={}", sessionKey);
+                voteService.finalize(voteId);
                 sendToGroupIfPossible(voteId, "finish_D");
                 kakaoWendyScheduler.stopSchedule(sessionKey); // 폴링 중지
             }
@@ -314,10 +331,7 @@ public class KakaoNotifier {
     /**
      * 카카오 메시지 API 호출 (템플릿)
      *
-     * 참고: 실제 사용하려면 카카오 비즈메시지 설정 필요
-     * - 카카오톡 채널 개설
-     * - 발신 프로필 등록
-     * - 알림톡 템플릿 승인
+     * 참고: 실제 사용하려면 카카오 비즈메시지 설정 필요 - 카카오톡 채널 개설 - 발신 프로필 등록 - 알림톡 템플릿 승인
      */
 //    public boolean sendKakaoMessage(String userKey, String templateId, Map<String, String> templateArgs) {
 //        try {
@@ -360,16 +374,22 @@ public class KakaoNotifier {
 //            return false;
 //        }
 //    }
-
     private String getDayLabel(DayOfWeek dayOfWeek) {
         return switch (dayOfWeek) {
-            case MONDAY -> "월";
-            case TUESDAY -> "화";
-            case WEDNESDAY -> "수";
-            case THURSDAY -> "목";
-            case FRIDAY -> "금";
-            case SATURDAY -> "토";
-            case SUNDAY -> "일";
+            case MONDAY ->
+                "월";
+            case TUESDAY ->
+                "화";
+            case WEDNESDAY ->
+                "수";
+            case THURSDAY ->
+                "목";
+            case FRIDAY ->
+                "금";
+            case SATURDAY ->
+                "토";
+            case SUNDAY ->
+                "일";
         };
     }
 
