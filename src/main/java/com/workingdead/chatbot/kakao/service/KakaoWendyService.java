@@ -17,7 +17,6 @@ import com.workingdead.meet.entity.TimePoll;
 import com.workingdead.meet.entity.Participant;
 import com.workingdead.meet.service.TimePollService;
 import com.workingdead.timepoll.enums.Period;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -33,56 +32,42 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.context.annotation.Lazy;
 
 /**
  * 카카오 챗봇용 웬디 서비스 Discord와 독립적으로 세션 관리 - 개인챗: userKey 기반 - 그룹챗: botGroupKey 기반
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class KakaoWendyService {
 
     private final VoteService voteService;
     private final ParticipantService participantService;
     private final VoteResultService voteResultService;
-
-    // ========== 세션 관리 (sessionKey = botGroupKey 또는 userKey) ==========
-    // 활성 세션 관리
-    private final Set<String> activeSessions = ConcurrentHashMap.newKeySet();
-
-    // 참석자 목록 (sessionKey -> List<botUserKey>)
-    private final Map<String, List<String>> participants = new ConcurrentHashMap<>();
-
-    // 참석자 표시명 (sessionKey -> List<표시명>)
-    private final Map<String, List<String>> participantDisplayNames = new ConcurrentHashMap<>();
-
-    // 생성된 투표 ID (sessionKey -> voteId)
-    private final Map<String, Long> sessionVoteId = new ConcurrentHashMap<>();
-
-    // 생성된 투표 링크 (sessionKey -> shareUrl)
-    private final Map<String, String> sessionShareUrl = new ConcurrentHashMap<>();
-
-    // 투표 생성 시각 (sessionKey -> createdAt)
-    private final Map<String, LocalDateTime> voteCreatedAt = new ConcurrentHashMap<>();
-
-    // 세션 상태 (sessionKey -> state)
-    private final Map<String, SessionState> sessionStates = new ConcurrentHashMap<>();
-
-    // botGroupKey -> voteId 매핑 (이벤트 메시지 발송용)
-    private final Map<String, Long> groupVoteId = new ConcurrentHashMap<>();
-
-    // voteId -> botGroupKey 역매핑
-    private final Map<Long, String> voteIdToGroupKey = new ConcurrentHashMap<>();
-
-    // 스케줄러
     private final KakaoWendyScheduler kakaoWendyScheduler;
     private final KakaoTimePollScheduler kakaoTimePollScheduler;
-
-    // 카카오봇 API 클라이언트 
     private final KakaoBotApiClient kakaoBotApiClient;
-
-    // 시간 투표 서비스
     private final TimePollService timePollService;
+    private final ObjectMapper objectMapper;
+
+    public KakaoWendyService(
+            VoteService voteService,
+            ParticipantService participantService,
+            VoteResultService voteResultService,
+            @Lazy KakaoWendyScheduler kakaoWendyScheduler,
+            @Lazy KakaoTimePollScheduler kakaoTimePollScheduler,
+            KakaoBotApiClient kakaoBotApiClient,
+            TimePollService timePollService,
+            ObjectMapper objectMapper) {
+        this.voteService = voteService;
+        this.participantService = participantService;
+        this.voteResultService = voteResultService;
+        this.kakaoWendyScheduler = kakaoWendyScheduler;
+        this.kakaoTimePollScheduler = kakaoTimePollScheduler;
+        this.kakaoBotApiClient = kakaoBotApiClient;
+        this.timePollService = timePollService;
+        this.objectMapper = objectMapper;
+    }
 
     public enum SessionState {
         IDLE,
@@ -90,10 +75,19 @@ public class KakaoWendyService {
         WAITING_WEEKS,
         VOTE_CREATED
     }
+    // ========== 인메모리 맵 ==========
+    private final Set<String> activeSessions = ConcurrentHashMap.newKeySet();
+    private final Map<String, List<String>> participants = new ConcurrentHashMap<>();
+    private final Map<String, List<String>> participantDisplayNames = new ConcurrentHashMap<>();
+    private final Map<String, Long> sessionVoteId = new ConcurrentHashMap<>();
+    private final Map<String, String> sessionShareUrl = new ConcurrentHashMap<>();
+    private final Map<String, LocalDateTime> voteCreatedAt = new ConcurrentHashMap<>();
+    private final Map<String, SessionState> sessionStates = new ConcurrentHashMap<>();
+    private final Map<String, Long> groupVoteId = new ConcurrentHashMap<>();
+    private final Map<Long, String> voteIdToGroupKey = new ConcurrentHashMap<>();
     private final Map<String, Long> groupTimePollId = new ConcurrentHashMap<>();
     private final Map<Long, String> timePollIdToGroupKey = new ConcurrentHashMap<>();
 
-    // ========== Deprecated: 하위 호환성 ==========
     @Deprecated
     private final Map<String, Long> userVoteId = sessionVoteId;
     @Deprecated
@@ -234,8 +228,6 @@ public class KakaoWendyService {
     /**
      * 투표 생성 (주차 선택 후)
      */
-    private final ObjectMapper objectMapper;
-
     public KakaoResponse createVote(String userKey, int weeks, String botUserKey) {
         voteCreatedAt.put(userKey, LocalDateTime.now());
 
