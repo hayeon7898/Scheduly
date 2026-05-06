@@ -54,6 +54,7 @@ public class KakaoWendyScheduler {
                 continue;
             }
             restoreSchedule(vote, botGroupKey);
+            log.info("[복구 확인] botGroupKey={}, sessionVoteId={}", botGroupKey, sessionVoteId.get(botGroupKey));
             // 인메모리 맵 복구
             kakaoWendyService.restoreVoteMapping(vote.getId(), botGroupKey);
         }
