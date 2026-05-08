@@ -403,6 +403,12 @@ public class KakaoSkillController {
 
         // 여기서 timePoll 생성 + 스케줄러 시작
         String timePollUrl = kakaoWendyService.createTimePoll(sessionKey, voteId);
+        try {
+            timePollUrl = kakaoWendyService.createTimePoll(sessionKey, voteId);
+        } catch (RuntimeException e) {
+            log.warn("[TimePoll] 생성 실패: {}", e.getMessage());
+            return ResponseEntity.ok(KakaoResponse.simpleText("아직 투표 결과가 없어요. 잠시 후 다시 시도해주세요."));
+        }
 
         return ResponseEntity.ok(KakaoResponse.builder()
                 .version("2.0")
