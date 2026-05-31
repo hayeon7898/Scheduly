@@ -402,7 +402,7 @@ public class KakaoSkillController {
         }
 
         // 여기서 timePoll 생성 + 스케줄러 시작
-        String timePollUrl = kakaoWendyService.createTimePoll(sessionKey, voteId);
+        String timePollUrl;
         try {
             timePollUrl = kakaoWendyService.createTimePoll(sessionKey, voteId);
         } catch (RuntimeException e) {

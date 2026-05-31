@@ -3,8 +3,8 @@ package com.workingdead.meet.dto.request;
 import com.workingdead.timepoll.enums.Period;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Getter
 @Setter

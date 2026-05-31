@@ -15,6 +15,7 @@ public interface TimePollRepository extends JpaRepository<TimePoll, Long> {
 
     // Vote ID로 시간 투표 조회
     Optional<TimePoll> findByVoteId(Long voteId);
+
     // 진행 중인 시간 투표 전체 조회
     List<TimePoll> findByStatus(TimePollStatus status);
 
@@ -27,6 +28,6 @@ public interface TimePollRepository extends JpaRepository<TimePoll, Long> {
     // 독촉 대상 조회: 진행 중 + 특정 독촉 단계 미만
     @Query("SELECT tp FROM TimePoll tp WHERE tp.status = :status AND tp.lastReminderStep < :step AND tp.createdAt < :before")
     List<TimePoll> findRemindTargets(@Param("status") TimePollStatus status,
-                                     @Param("step") int step,
-                                     @Param("before") Instant before);
+            @Param("step") int step,
+            @Param("before") Instant before);
 }

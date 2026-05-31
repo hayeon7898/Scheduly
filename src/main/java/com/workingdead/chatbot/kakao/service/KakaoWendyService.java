@@ -1090,6 +1090,13 @@ public class KakaoWendyService {
     }
 
     /**
+     * timePollId로 botGroupKey 조회
+     */
+    public String getBotGroupKeyByTimePollId(Long timePollId) {
+        return timePollIdToGroupKey.get(timePollId);
+    }
+
+    /**
      * 시간투표 재시작시 매핑 복구
      */
     public void restoreTimePollMapping(Long timePollId, String botGroupKey) {

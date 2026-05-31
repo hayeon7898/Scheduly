@@ -1,20 +1,27 @@
 package com.workingdead.chatbot.kakao.scheduler;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
+
 import com.workingdead.chatbot.kakao.service.KakaoTimePollNotifier;
 import com.workingdead.chatbot.kakao.service.KakaoWendyService;
 import com.workingdead.meet.entity.TimePoll;
 import com.workingdead.meet.entity.TimePollStatus;
 import com.workingdead.meet.repository.TimePollRepository;
+
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.*;
 
 @Component
 @Slf4j
@@ -53,6 +60,7 @@ public class KakaoTimePollScheduler {
                 continue;
             }
             restoreSchedule(poll, botGroupKey);
+            log.info("[Timepoll 복구 확인] botGroupKey={}", botGroupKey);
             // 인메모리 맵 복구
             kakaoWendyService.restoreTimePollMapping(poll.getId(), botGroupKey);
         }
