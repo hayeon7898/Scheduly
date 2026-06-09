@@ -33,7 +33,7 @@ jobs:
           target: "/home/ubuntu/dev/scheduly"
           strip_components: 2          # build/libs/ 경로 제거하고 JAR만 올림
           overwrite: true
-          fingerprint: ""
+          fingerprint: ${{ secrets.EC2_FINGERPRINT }}
 
       - name: Restart Spring Boot app on EC2
         uses: appleboy/ssh-action@v1.0.3
@@ -41,7 +41,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          fingerprint: ""
+          fingerprint: ${{ secrets.EC2_FINGERPRINT }}
           script: |
             cd /home/ubuntu/dev/scheduly
 
