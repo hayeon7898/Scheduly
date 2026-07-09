@@ -80,11 +80,14 @@ public class KakaoSkillController {
             return ResponseEntity.ok(kakaoWendyService.help());
         }
 
-        String trimmed = utterance.trim();
+        // 그룹챗에서는 버튼 클릭도 "@봇이름 내용" 형태로 발화가 오므로, 앞의 멘션은 떼고 매칭한다.
+        // 예: "@스케쥴리 참여할래요" → "참여할래요"
+        String trimmed = utterance.trim().replaceFirst("^@\\S+\\s+", "");
 
         // 0. 참여 등록 ("참여" 버튼 클릭 시 오는 발화. 24시간 수집 창 동안에만 의미가 있음)
         //    각 사용자가 버튼을 누르면 "그 사람만의" 요청이 오므로, botUserKey로 그 사람을 식별해 누적한다.
-        if (trimmed.equals("참여")) {
+        //    버튼의 messageText가 무시되고 label("참여할래요")이 그대로 전송되는 것으로 보여, 둘 다 받아준다.
+        if (trimmed.equals("참여") || trimmed.equals("참여할래요")) {
             return ResponseEntity.ok(kakaoWendyService.joinPendingSession(sessionKey, botUserKey));
         }
 
