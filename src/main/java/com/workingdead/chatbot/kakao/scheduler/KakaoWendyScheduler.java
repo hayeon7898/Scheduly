@@ -16,8 +16,11 @@ import org.springframework.stereotype.Component;
 
 import com.workingdead.chatbot.kakao.service.KakaoNotifier;
 import com.workingdead.chatbot.kakao.service.KakaoWendyService;
+import com.workingdead.enums.PendingSessionStatus;
 import com.workingdead.enums.VoteStatus;
+import com.workingdead.meet.entity.PendingSession;
 import com.workingdead.meet.entity.Vote;
+import com.workingdead.meet.repository.PendingSessionRepository;
 import com.workingdead.meet.repository.VoteRepository;
 
 import jakarta.annotation.PostConstruct;
@@ -27,19 +30,27 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class KakaoWendyScheduler {
 
+    private static final long COLLECTION_WINDOW_SECONDS = 24 * 3600;
+
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private final KakaoNotifier notifier;
     private final VoteRepository voteRepository;
     private final KakaoWendyService kakaoWendyService;
+    private final PendingSessionRepository pendingSessionRepository;
     private final Map<String, List<ScheduledFuture<?>>> userTasks = new ConcurrentHashMap<>();
+
+    /** 24시간 참여자 수집 타이머 전용 맵 (리마인더 스케줄과는 별도 트랙) */
+    private final Map<String, ScheduledFuture<?>> collectionTasks = new ConcurrentHashMap<>();
 
     public KakaoWendyScheduler(
             @Lazy KakaoNotifier notifier,
             VoteRepository voteRepository,
-            @Lazy KakaoWendyService kakaoWendyService) {
+            @Lazy KakaoWendyService kakaoWendyService,
+            PendingSessionRepository pendingSessionRepository) {
         this.notifier = notifier;
         this.voteRepository = voteRepository;
         this.kakaoWendyService = kakaoWendyService;
+        this.pendingSessionRepository = pendingSessionRepository;
     }
 
     @PostConstruct
@@ -55,8 +66,15 @@ public class KakaoWendyScheduler {
             }
             restoreSchedule(vote, botGroupKey);
             log.info("[Wendy 복구 확인] botGroupKey={}", botGroupKey);
-            // 인메모리 맵 복구
             kakaoWendyService.restoreVoteMapping(vote.getId(), botGroupKey);
+        }
+
+        // 참여자 수집 중이던 세션도 복구
+        List<PendingSession> collecting = pendingSessionRepository.findByStatus(PendingSessionStatus.COLLECTING);
+        log.info("[WendyScheduler] Restoring {} pending collection sessions", collecting.size());
+
+        for (PendingSession pending : collecting) {
+            restoreCollectionSchedule(pending);
         }
     }
 
@@ -96,6 +114,34 @@ public class KakaoWendyScheduler {
         log.info("[WendyScheduler] Restored: sessionKey={}, elapsed={}s", sessionKey, elapsed);
     }
 
+    /**
+     * 서버 재시작 시, 아직 24시간이 지나지 않은 참여자 수집 세션의 남은 시간을 계산해 재예약합니다.
+     * 이미 24시간이 지나버린 경우엔 즉시(0초 뒤) 마감 처리합니다.
+     */
+    private void restoreCollectionSchedule(PendingSession pending) {
+        String sessionKey = pending.getSessionKey();
+        long elapsed = Duration.between(pending.getCreatedAt(), Instant.now()).getSeconds();
+        long remaining = COLLECTION_WINDOW_SECONDS - elapsed;
+
+        if (remaining <= 0) {
+            log.info("[WendyScheduler] Collection window already passed while server was down. "
+                    + "Finalizing immediately: sessionKey={}, elapsed={}s", sessionKey, elapsed);
+            ScheduledFuture<?> task = scheduler.schedule(
+                    () -> kakaoWendyService.finalizeCollecting(sessionKey),
+                    0, TimeUnit.SECONDS
+            );
+            collectionTasks.put(sessionKey, task);
+            return;
+        }
+
+        ScheduledFuture<?> task = scheduler.schedule(
+                () -> kakaoWendyService.finalizeCollecting(sessionKey),
+                remaining, TimeUnit.SECONDS
+        );
+        collectionTasks.put(sessionKey, task);
+        log.info("[WendyScheduler] Restored collection schedule: sessionKey={}, remaining={}s", sessionKey, remaining);
+    }
+
     private void scheduleIfRemaining(
             List<ScheduledFuture<?>> list,
             long elapsedSeconds,
@@ -110,7 +156,32 @@ public class KakaoWendyScheduler {
     }
 
     /**
-     * 스케줄 시작 (투표 생성 후 호출)
+     * 24시간 참여자 수집 타이머 시작 (주차 선택 직후 호출)
+     */
+    public void startCollectionSchedule(String sessionKey) {
+        stopCollectionSchedule(sessionKey);
+
+        ScheduledFuture<?> task = scheduler.schedule(
+                () -> kakaoWendyService.finalizeCollecting(sessionKey),
+                COLLECTION_WINDOW_SECONDS, TimeUnit.SECONDS
+        );
+        collectionTasks.put(sessionKey, task);
+        log.info("[WendyScheduler] Collection schedule started: sessionKey={}", sessionKey);
+    }
+
+    /**
+     * 24시간 참여자 수집 타이머 중지 (재투표/종료/재선택 시 호출)
+     */
+    public void stopCollectionSchedule(String sessionKey) {
+        ScheduledFuture<?> task = collectionTasks.remove(sessionKey);
+        if (task != null) {
+            task.cancel(false);
+            log.info("[WendyScheduler] Collection schedule stopped: sessionKey={}", sessionKey);
+        }
+    }
+
+    /**
+     * 스케줄 시작 (투표 생성 후 호출) - 기존 리마인더 체계
      */
     public void startSchedule(String sessionKey) {
         if (userTasks.containsKey(sessionKey)) {
@@ -129,10 +200,9 @@ public class KakaoWendyScheduler {
         ));
 
         // 2) 미투표자 독촉
-        // 테스트용 - 나중에 30분으로 되돌리기!
         tasks.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(sessionKey, "30min"),
-                30, TimeUnit.MINUTES // 30 → 1
+                30, TimeUnit.MINUTES
         ));
         tasks.add(scheduler.schedule(
                 () -> notifier.remindNonVoters(sessionKey, "2hour"),
