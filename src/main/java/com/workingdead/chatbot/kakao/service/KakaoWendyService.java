@@ -6,6 +6,9 @@ import com.workingdead.meet.dto.VoteDtos.CreateVoteReq;
 import com.workingdead.meet.dto.VoteDtos.VoteSummary;
 import com.workingdead.meet.dto.VoteResultDtos.RankingRes;
 import com.workingdead.meet.dto.VoteResultDtos.VoteResultRes;
+import com.workingdead.meet.entity.PendingSession;
+import com.workingdead.meet.repository.PendingSessionRepository;
+import com.workingdead.enums.PendingSessionStatus;
 import com.workingdead.meet.service.ParticipantService;
 import com.workingdead.meet.service.VoteResultService;
 import com.workingdead.meet.service.VoteService;
@@ -33,6 +36,7 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 카카오 챗봇용 웬디 서비스 Discord와 독립적으로 세션 관리 - 개인챗: userKey 기반 - 그룹챗: botGroupKey 기반
@@ -49,6 +53,8 @@ public class KakaoWendyService {
     private final KakaoBotApiClient kakaoBotApiClient;
     private final TimePollService timePollService;
     private final ObjectMapper objectMapper;
+    private final PendingSessionRepository pendingSessionRepository;
+    private final KakaoNotifier kakaoNotifier;
 
     public KakaoWendyService(
             VoteService voteService,
@@ -58,7 +64,9 @@ public class KakaoWendyService {
             @Lazy KakaoTimePollScheduler kakaoTimePollScheduler,
             KakaoBotApiClient kakaoBotApiClient,
             TimePollService timePollService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            PendingSessionRepository pendingSessionRepository,
+            @Lazy KakaoNotifier kakaoNotifier) {
         this.voteService = voteService;
         this.participantService = participantService;
         this.voteResultService = voteResultService;
@@ -67,6 +75,8 @@ public class KakaoWendyService {
         this.kakaoBotApiClient = kakaoBotApiClient;
         this.timePollService = timePollService;
         this.objectMapper = objectMapper;
+        this.pendingSessionRepository = pendingSessionRepository;
+        this.kakaoNotifier = kakaoNotifier;
     }
 
     public enum SessionState {
@@ -97,21 +107,6 @@ public class KakaoWendyService {
     /**
      * 세션 시작 (웬디 시작)
      */
-    // public KakaoResponse startSession(String userKey) {
-    //     activeSessions.add(userKey);
-    //     participants.put(userKey, new ArrayList<>());
-    //     participantDisplayNames.put(userKey, new ArrayList<>());
-    //     userVoteId.remove(userKey);
-    //     userShareUrl.remove(userKey);
-    //     voteCreatedAt.remove(userKey);
-    //     sessionStates.put(userKey, SessionState.WAITING_WEEKS);
-    //     log.info("[Kakao When:D] Session started: {}", userKey);
-    //     Map<String, Object> data = new HashMap<>();
-    //     data.put("sessionKey", userKey);
-    //     data.put("state", SessionState.WAITING_WEEKS.name());
-    //     data.put("active", true);
-    //     return dataOnly(data);
-    // }
     public KakaoResponse startSession(String userKey) {
         activeSessions.add(userKey);
         participants.put(userKey, new ArrayList<>());
@@ -154,6 +149,7 @@ public class KakaoWendyService {
      */
     public KakaoResponse endSession(String userKey) {
         kakaoWendyScheduler.stopSchedule(userKey);
+        kakaoWendyScheduler.stopCollectionSchedule(userKey);
         activeSessions.remove(userKey);
         participants.remove(userKey);
         userVoteId.remove(userKey);
@@ -161,6 +157,9 @@ public class KakaoWendyService {
         userShareUrl.remove(userKey);
         voteCreatedAt.remove(userKey);
         sessionStates.remove(userKey);
+
+        pendingSessionRepository.findBySessionKeyAndStatus(userKey, PendingSessionStatus.COLLECTING)
+                .ifPresent(pendingSessionRepository::delete);
 
         log.info("[Kakao When:D] Session ended: {}", userKey);
 
@@ -178,11 +177,166 @@ public class KakaoWendyService {
         return sessionStates.getOrDefault(userKey, SessionState.IDLE);
     }
 
-    // ========== 참석자 관리 ==========
+    // ========== 참여자 수집 (신규 흐름) ==========
+    /**
+     * 주차 선택 완료 → 날짜범위 확정 + 24시간 참여자 수집 시작
+     * (기존 createVote()를 즉시 호출하는 대신, 이 메서드가 대체합니다.)
+     */
+    @Transactional
+    public KakaoResponse startCollecting(String sessionKey, int weeks, String botGroupKey) {
+        // 1. 날짜 범위 계산 (기존 createVote와 동일 로직)
+        LocalDate today = LocalDate.now();
+        LocalDate startDate;
+        LocalDate endDate;
+
+        if (weeks == 0) {
+            startDate = today;
+            int daysToSunday = DayOfWeek.SUNDAY.getValue() - today.getDayOfWeek().getValue();
+            endDate = today.plusDays(Math.max(daysToSunday, 0));
+        } else {
+            LocalDate mondayThisWeek = today.with(DayOfWeek.MONDAY);
+            startDate = mondayThisWeek.plusWeeks(weeks);
+            endDate = startDate.plusDays(6);
+        }
+
+        // 2. 이전에 수집 중이던 세션이 남아있으면 정리 (재선택 대비)
+        pendingSessionRepository.findBySessionKeyAndStatus(sessionKey, PendingSessionStatus.COLLECTING)
+                .ifPresent(pendingSessionRepository::delete);
+        kakaoWendyScheduler.stopCollectionSchedule(sessionKey);
+
+        // 3. PendingSession 저장
+        PendingSession pending = new PendingSession(sessionKey, botGroupKey, startDate, endDate);
+        pendingSessionRepository.save(pending);
+
+        sessionStates.put(sessionKey, SessionState.WAITING_PARTICIPANTS);
+
+        // 4. 24시간 수집 타이머 시작
+        kakaoWendyScheduler.startCollectionSchedule(sessionKey);
+
+        log.info("[Kakao When:D] Collecting started: sessionKey={}, weeks={}, startDate={}, endDate={}",
+                sessionKey, weeks, startDate, endDate);
+
+        String weekLabel = weeks == 0 ? "이번 주" : weeks + "주 뒤";
+
+        return KakaoResponse.builder()
+                .version("2.0")
+                .template(KakaoResponse.Template.builder()
+                        .outputs(List.of(
+                                KakaoResponse.Output.builder()
+                                        .simpleText(KakaoResponse.SimpleText.builder()
+                                                .text(weekLabel + "를 선택하셨어요\n24시간 동안 참여자를 모을게요 :D")
+                                                .build())
+                                        .build(),
+                                KakaoResponse.Output.builder()
+                                        .textCard(KakaoResponse.BasicCard.builder()
+                                                .title("이 약속에 참여하시나요?")
+                                                .description("아래 버튼을 눌러주세요!\n24시간 후에 모인 분들끼리 투표를 시작할게요🙂")
+                                                .buttons(List.of(
+                                                        KakaoResponse.messageButton("참여할래요", "참여")
+                                                ))
+                                                .build())
+                                        .build()
+                        ))
+                        .build())
+                .build();
+    }
+
+    /**
+     * "참여" 버튼 클릭 처리. 수집 중인 세션에 botUserKey만 누적합니다.
+     * (요청하신 대로 이름 등록 등은 하지 않고, DB에 추가만 합니다.)
+     */
+    @Transactional
+    public KakaoResponse joinPendingSession(String sessionKey, String botUserKey) {
+        Optional<PendingSession> opt = pendingSessionRepository
+                .findBySessionKeyAndStatus(sessionKey, PendingSessionStatus.COLLECTING);
+
+        if (opt.isEmpty()) {
+            return KakaoResponse.simpleText("지금은 참여를 받는 시간이 아니에요 :(");
+        }
+
+        if (botUserKey == null || botUserKey.isBlank()) {
+            log.warn("[Kakao When:D] joinPendingSession called without botUserKey. sessionKey={}", sessionKey);
+            return KakaoResponse.simpleText("참여자 정보를 확인하지 못했어요. 잠시 후 다시 시도해주세요.");
+        }
+
+        PendingSession pending = opt.get();
+        pending.getBotUserKeys().add(botUserKey);
+        pendingSessionRepository.save(pending);
+
+        log.info("[Kakao When:D] Participant joined: sessionKey={}, botUserKey={}, count={}",
+                sessionKey, botUserKey, pending.getBotUserKeys().size());
+
+        return KakaoResponse.simpleText("참여 완료했어요! 🙌");
+    }
+
+    /**
+     * 24시간 경과 후 스케줄러가 호출. 그동안 모인 참여자로 실제 Vote를 생성합니다.
+     */
+    @Transactional
+    public void finalizeCollecting(String sessionKey) {
+        Optional<PendingSession> opt = pendingSessionRepository
+                .findBySessionKeyAndStatus(sessionKey, PendingSessionStatus.COLLECTING);
+
+        if (opt.isEmpty()) {
+            log.warn("[Kakao When:D] finalizeCollecting: no pending session. sessionKey={}", sessionKey);
+            return;
+        }
+
+        PendingSession pending = opt.get();
+
+        // 1. Vote 생성 (이름 목록 없이 날짜범위만)
+        CreateVoteReq req = new CreateVoteReq(
+                "카카오 투표",
+                pending.getStartDate(),
+                pending.getEndDate(),
+                null
+        );
+        VoteSummary summary = voteService.create(req);
+        Long voteId = summary.id();
+        String shareUrl = summary.shareUrl();
+
+        // 2. 참여자 등록 (botUserKey만, displayName은 "미등록"으로 시작 → 이후 프론트에서 채움)
+        for (String botUserKey : pending.getBotUserKeys()) {
+            participantService.addIfNotExists(voteId, botUserKey);
+        }
+
+        // 3. 세션 상태를 VOTE_CREATED로 전환 (기존 createVote와 동일하게 채워줌)
+        voteCreatedAt.put(sessionKey, LocalDateTime.now());
+        sessionVoteId.put(sessionKey, voteId);
+        sessionShareUrl.put(sessionKey, shareUrl);
+        sessionStates.put(sessionKey, SessionState.VOTE_CREATED);
+
+        String botGroupKey = pending.getBotGroupKey();
+        if (botGroupKey != null && !botGroupKey.isBlank()) {
+            groupVoteId.put(botGroupKey, voteId);
+            voteIdToGroupKey.put(voteId, botGroupKey);
+            voteService.updateBotGroupKey(voteId, botGroupKey);
+        }
+
+        // 4. PendingSession 마감 처리
+        pending.setStatus(PendingSessionStatus.FINALIZED);
+        pendingSessionRepository.save(pending);
+
+        // 5. 기존 리마인더 스케줄(3분/30분/.../25시간) 시작
+        kakaoWendyScheduler.startSchedule(sessionKey);
+
+        log.info("[Kakao When:D] Collecting finalized: sessionKey={}, voteId={}, participantCount={}, shareUrl={}",
+                sessionKey, voteId, pending.getBotUserKeys().size(), shareUrl);
+
+        // 6. 채팅방에 능동 알림 (그룹인 경우만; 카카오 관리자센터에 "vote_created_D" 이벤트 이름을
+        //    미리 블록에 등록해두어야 실제로 메시지가 나갑니다)
+        if (botGroupKey != null && !botGroupKey.isBlank()) {
+            kakaoNotifier.sendEventToGroup(botGroupKey, "vote_created_D");
+        }
+    }
+
+    // ========== 참석자 관리 (기존 코드 - 지금은 사용되지 않는 경로, 정리 전까지 유지) ==========
     /**
      * 참석자 추가 (botUserKey 리스트 입력)
      *
+     * @deprecated startCollecting/joinPendingSession 흐름으로 대체됨. 컨트롤러에서 더 이상 호출하지 않음.
      */
+    @Deprecated
     public KakaoResponse addParticipants(String userKey, String input) {
         // input: 컨트롤러에서 botUserKey 목록을 ","로 정규화하여 전달한다고 가정
         String raw = Optional.ofNullable(input).orElse("");
@@ -224,10 +378,15 @@ public class KakaoWendyService {
         return dataOnly(data);
     }
 
-    // ========== 투표 생성 ==========
+    // ========== 투표 생성 (기존 코드 - 즉시생성 경로. startCollecting으로 대체되었으나
+    //             다른 곳에서 참조할 수 있어 남겨둠) ==========
     /**
-     * 투표 생성 (주차 선택 후)
+     * 투표 생성 (주차 선택 후, 즉시 생성하는 옛 버전)
+     *
+     * @deprecated startCollecting()이 대신 호출됩니다. 즉시 생성이 필요한 특수 케이스가
+     *             아니라면 사용하지 마세요.
      */
+    @Deprecated
     public KakaoResponse createVote(String userKey, int weeks, String botUserKey) {
         voteCreatedAt.put(userKey, LocalDateTime.now());
 
@@ -281,25 +440,21 @@ public class KakaoWendyService {
 
         data.put("sessionKey", userKey);
         data.put("state", SessionState.VOTE_CREATED.name());
-        // return dataOnly(data);
 
         KakaoResponse response = KakaoResponse.builder()
                 .version("2.0")
                 .template(KakaoResponse.Template.builder()
                         .outputs(List.of(
-                                // 첫 번째 메시지
                                 KakaoResponse.Output.builder()
                                         .simpleText(KakaoResponse.SimpleText.builder()
                                                 .text(weekLabel + "를 선택하셨어요\n해당 일정의 투표를 만들어드릴게요 :D")
                                                 .build())
                                         .build(),
-                                // 두 번째 메시지
                                 KakaoResponse.Output.builder()
                                         .simpleText(KakaoResponse.SimpleText.builder()
                                                 .text("(투표 늦게 하는 사람 대머리 🧑‍🦲)")
                                                 .build())
                                         .build(),
-                                // 세 번째 메시지 - 버튼 카드
                                 KakaoResponse.Output.builder()
                                         .textCard(KakaoResponse.BasicCard.builder()
                                                 .title("투표 생성 완료!!")
@@ -385,9 +540,6 @@ public class KakaoWendyService {
             StringBuilder sb = new StringBuilder();
             sb.append("스케쥴리가 투표 현황을 공유드려요! :D\n\n");
             sb.append("엥 아직 아무도 투표를 안 했네요 :(\n");
-            // if (shareUrl != null && !shareUrl.isBlank()) {
-            //     sb.append("\n투표하러 가기: ").append(shareUrl);
-            // }
             return textOnly(sb.toString().trim());
         }
 
@@ -401,11 +553,6 @@ public class KakaoWendyService {
         StringBuilder sb = new StringBuilder();
         sb.append("스케쥴리가 투표 현황을 공유드려요! :D\n\n");
 
-        // if (shareUrl != null && !shareUrl.isBlank()) {
-        //     sb.append("\n투표하러 가기: ").append(shareUrl).append("\n\n");
-        // } else {
-        //     sb.append("\n투표 링크가 준비되지 않았어요 😢\n\n");
-        // }
         for (RankingRes rank : top3) {
             String periodLabel = "LUNCH".equals(rank.period()) ? "점심" : "저녁";
 
@@ -424,7 +571,6 @@ public class KakaoWendyService {
             sb.append("\n");
         }
 
-        // top3 가 비어있으면(이상 케이스) 그래도 안전하게 메시지 출력
         if (top3.isEmpty()) {
             sb.append("아직 집계할 수 있는 순위 결과가 없어요 :(");
         }
@@ -435,24 +581,11 @@ public class KakaoWendyService {
     /**
      * 재투표 (동일 참석자로 새 투표 생성)
      */
-    // public KakaoResponse revote(String userKey) {
-    //     if (!userVoteId.containsKey(userKey)) {
-    //         Map<String, Object> data = new HashMap<>();
-    //         data.put("hasVote", false);
-    //         data.put("state", getSessionState(userKey).name());
-    //         return dataOnly(data);
-    //     }
-    //     kakaoWendyScheduler.stopSchedule(userKey);
-    //     userVoteId.remove(userKey);
-    //     sessionStates.put(userKey, SessionState.WAITING_WEEKS);
-    //     Map<String, Object> data = new HashMap<>();
-    //     data.put("hasVote", true);
-    //     data.put("state", SessionState.WAITING_WEEKS.name());
-    //     return dataOnly(data);
-    // }
     public KakaoResponse revote(String userKey) {
         // 기존 투표 데이터 정리
         kakaoWendyScheduler.stopSchedule(userKey);
+        kakaoWendyScheduler.stopCollectionSchedule(userKey);
+
         Long voteId = sessionVoteId.get(userKey);
         if (voteId != null) {
             String groupKey = voteIdToGroupKey.remove(voteId);
@@ -463,6 +596,10 @@ public class KakaoWendyService {
         sessionVoteId.remove(userKey);
         sessionShareUrl.remove(userKey);
         voteCreatedAt.remove(userKey);
+
+        // 수집 중이던 PendingSession이 남아있다면 정리
+        pendingSessionRepository.findBySessionKeyAndStatus(userKey, PendingSessionStatus.COLLECTING)
+                .ifPresent(pendingSessionRepository::delete);
 
         // 그냥 시작과 동일하게
         return startSession(userKey);
@@ -538,21 +675,7 @@ public class KakaoWendyService {
             return KakaoResponse.simpleText("스케쥴리가 투표 현황을 공유드려요! :D\n\n엥 아직 아무도 투표를 안 했네요 :(");
         }
 
-        // 멘션 구성 (Map<String, String>)
-        // Map<String, String> mentions = new LinkedHashMap<>();
-        //StringBuilder mentionSb = new StringBuilder();
-        // for (int i = 0; i < nonVoters.size(); i++) {
-        //     String userKey = "user" + (i + 1);
-        //     String kakaoId = nonVoters.get(i).kakaoId();
-        //     if (kakaoId != null && !kakaoId.isBlank()) {
-        //         mentions.put(userKey, kakaoId);
-        //         mentionSb.append(KakaoResponse.buildMentionText(userKey)); // #{mentions.user1}
-        //     } else {
-        //         mentionSb.append(nonVoters.get(i).displayName());
-        //     }
-        //     if (i < nonVoters.size() - 1) mentionSb.append(", ");
-        // }
-        // 멘션 구성 - 타입 변경
+        // 멘션 구성 - Map<String, Map<String, String>>
         Map<String, Map<String, String>> mentions = new LinkedHashMap<>();
         StringBuilder mentionSb = new StringBuilder();
 
@@ -596,81 +719,8 @@ public class KakaoWendyService {
             log.warn("[REMIND] response JSON 로깅 실패: {}", e.getMessage());
         }
         return res;
-
-        // return KakaoResponse.textWithQuickRepliesAndMentions(message, mentions, null);
     }
 
-    /**
-     * 투표 완료 메시지 생성
-     */
-    // public KakaoResponse buildCompletionResponse(String sessionKey) {
-    //     Long voteId = sessionVoteId.get(sessionKey);
-    //     VoteResultRes result = voteResultService.getVoteResult(voteId);
-    //     StringBuilder sb = new StringBuilder("투표가 완료됐어요! :D\n\n");
-    //     String timePollUrl = null;
-    //     if (result != null && result.rankings() != null) {
-    //         List<RankingRes> top3 = result.rankings().stream()
-    //                 .filter(r -> r.rank() != null && r.rank() <= 3)
-    //                 .sorted(Comparator.comparingInt(RankingRes::rank))
-    //                 .toList();
-    //         for (RankingRes r : top3) {
-    //             String periodLabel = "LUNCH".equals(r.period()) ? "점심" : "저녁";
-    //             String dayLabel = getDayLabel(r.date().getDayOfWeek());
-    //             sb.append("📌").append(r.rank()).append("순위 ")
-    //                     .append(r.date().format(DateTimeFormatter.ofPattern("MM/dd")))
-    //                     .append("(").append(dayLabel).append(") ")
-    //                     .append(periodLabel).append("\n");
-    //             if (r.voters() != null && !r.voters().isEmpty()) {
-    //                 String voters = r.voters().stream()
-    //                         .map(v -> v.participantName()
-    //                                 + (v.priorityIndex() != null ? "(" + v.priorityIndex() + ")" : ""))
-    //                         .collect(Collectors.joining(", "));
-    //                 sb.append("투표자: ").append(voters).append("\n");
-    //             }
-    //             sb.append("\n");
-    //         }
-    //         // 1순위로 time-poll 생성
-    //         if (!top3.isEmpty()) {
-    //             RankingRes top = top3.get(0);
-    //             try {
-    //                 TimePollCreateRequest req = new TimePollCreateRequest();
-    //                 req.setVoteId(voteId);
-    //                 req.setConfirmedDate(top.date().format(DateTimeFormatter.ofPattern("M월 d일")));
-    //                 req.setPeriod(Period.valueOf(top.period()));
-    //                 TimePoll timePoll = timePollService.create(req);
-    //                 timePollUrl = "https://schedulyy.netlify.app/time/" + timePoll.getId();
-    //             } catch (Exception e) {
-    //                 log.warn("[Kakao] Failed to create time-poll: {}", e.getMessage());
-    //             }
-    //         }
-    //     }
-    //     sb.append("이제 몇 시에 만날지 정해볼까요?🙂");
-    //     // 버튼 구성
-    //     List<KakaoResponse.Button> buttons = new ArrayList<>();
-    //     if (timePollUrl != null) {
-    //         buttons.add(KakaoResponse.Button.builder()
-    //                 .label("좋아요")
-    //                 .action("webLink")
-    //                 .webLinkUrl(timePollUrl)
-    //                 .build());
-    //     }
-    //     buttons.add(KakaoResponse.messageButton("재투표할래요", "웬디 재투표"));
-    //     buttons.add(KakaoResponse.messageButton("종료할게요", "웬디 종료"));
-    //     return KakaoResponse.builder()
-    //             .version("2.0")
-    //             .template(KakaoResponse.Template.builder()
-    //                     .outputs(List.of(
-    //                             KakaoResponse.Output.builder()
-    //                                     .textCard(KakaoResponse.BasicCard.builder()
-    //                                             .title("투표가 완료됐어요! :D")
-    //                                             .description(sb.toString().trim())
-    //                                             .buttons(buttons)
-    //                                             .build())
-    //                                     .build()
-    //                     ))
-    //                     .build())
-    //             .build();
-    //     }
     /**
      * 최후통첩
      */
@@ -680,31 +730,23 @@ public class KakaoWendyService {
             return KakaoResponse.simpleText("진행 중인 투표가 없어요.");
         }
 
-        // 미투표자 조회
         List<ParticipantStatusRes> nonVoters = participantService.getParticipantStatusByVoteId(voteId)
                 .stream()
                 .filter(s -> !s.submitted())
                 .toList();
 
         if (nonVoters.isEmpty()) {
-            // 이미 다 투표했으면 완료 처리
             return buildCompletionResponse(sessionKey);
         }
 
-        // 마감 시간 = 생성 시각 + 24시간
-        // LocalDateTime createdAt = voteCreatedAt.get(sessionKey);
-        // String deadline = createdAt != null
-        //         ? createdAt.plusHours(24).format(DateTimeFormatter.ofPattern("MM/dd HH:mm"))
-        //         : "곧";
         LocalDateTime createdAt = voteCreatedAt.get(sessionKey);
         String deadline = createdAt != null
-                ? createdAt.atZone(ZoneId.of("UTC")) // 저장된 시간이 UTC임을 명시
-                        .withZoneSameInstant(ZoneId.of("Asia/Seoul")) // KST로 변환
+                ? createdAt.atZone(ZoneId.of("UTC"))
+                        .withZoneSameInstant(ZoneId.of("Asia/Seoul"))
                         .plusHours(25)
                         .format(DateTimeFormatter.ofPattern("MM/dd HH:mm"))
                 : "곧";
 
-        // 멘션 구성
         Map<String, Map<String, String>> mentions = new LinkedHashMap<>();
         StringBuilder mentionSb = new StringBuilder();
         for (int i = 0; i < nonVoters.size(); i++) {
@@ -723,16 +765,9 @@ public class KakaoWendyService {
             }
         }
 
-        // 1순위 조회
         VoteResultRes result = voteResultService.getVoteResult(voteId);
         String topResult = "미정";
         if (result != null && result.rankings() != null) {
-            result.rankings().stream()
-                    .filter(r -> r.rank() == 1)
-                    .findFirst()
-                    .ifPresent(top -> {
-                        // topResult 재할당 불가라 StringBuilder 사용
-                    });
             RankingRes top = result.rankings().stream()
                     .filter(r -> r.rank() == 1)
                     .findFirst().orElse(null);
@@ -754,9 +789,7 @@ public class KakaoWendyService {
         Long voteId = sessionVoteId.get(sessionKey);
         VoteResultRes result = voteResultService.getVoteResult(voteId);
 
-        // 순위 결과 텍스트
         StringBuilder rankSb = new StringBuilder();
-        String timePollUrl = null;
 
         if (result != null && result.rankings() != null) {
             List<RankingRes> top3 = result.rankings().stream()
@@ -780,33 +813,9 @@ public class KakaoWendyService {
                 }
                 rankSb.append("\n");
             }
-
-            // if (!top3.isEmpty()) {
-            //     RankingRes top = top3.get(0);
-            //     try {
-            //         TimePollCreateRequest req = new TimePollCreateRequest();
-            //         req.setVoteId(voteId);
-            //         req.setConfirmedDate(top.date().format(DateTimeFormatter.ofPattern("M월 d일")));
-            //         req.setPeriod(Period.valueOf(top.period()));
-            //         TimePoll timePoll = timePollService.create(req);
-            //         timePollUrl = "https://schedulyy.netlify.app/time/" + timePoll.getId();
-            //     } catch (Exception e) {
-            //         log.warn("[Kakao] Failed to create time-poll: {}", e.getMessage());
-            //     }
-            // }
         }
 
-        // 버튼 구성
         List<KakaoResponse.Button> buttons = new ArrayList<>();
-        // if (timePollUrl != null) {
-        //     // webLink 대신 message로 → 새 메시지 트리거
-        //     final String finalTimePollUrl = timePollUrl;
-        //     buttons.add(KakaoResponse.Button.builder()
-        //             .label("좋아요")
-        //             .action("message")
-        //             .messageText("시간 투표")
-        //             .build());
-        // }
         buttons.add(KakaoResponse.Button.builder()
                 .label("좋아요")
                 .action("message")
@@ -817,7 +826,6 @@ public class KakaoWendyService {
 
         List<KakaoResponse.Output> outputs = new ArrayList<>();
 
-        // 순위 결과 - simpleText로 (검은색)
         if (!rankSb.isEmpty()) {
             outputs.add(KakaoResponse.Output.builder()
                     .simpleText(KakaoResponse.SimpleText.builder()
@@ -826,7 +834,6 @@ public class KakaoWendyService {
                     .build());
         }
 
-        // 완료 카드 - 버튼만
         outputs.add(KakaoResponse.Output.builder()
                 .textCard(KakaoResponse.BasicCard.builder()
                         .title("모두 투표를 완료했어요! :D")
@@ -849,7 +856,7 @@ public class KakaoWendyService {
 
         if (existingTimePollId != null) {
             kakaoTimePollScheduler.stopSchedule(existingTimePollId);
-            timePollService.delete(existingTimePollId);  // delete 메서드 필요
+            timePollService.delete(existingTimePollId);
             groupTimePollId.remove(botGroupKey);
             timePollIdToGroupKey.remove(existingTimePollId);
         }
@@ -858,7 +865,6 @@ public class KakaoWendyService {
             throw new RuntimeException("투표 결과가 없습니다.");
         }
 
-        // 1~3위만 사용
         List<RankingRes> top3 = result.rankings().stream()
                 .filter(r -> r.rank() != null && r.rank() <= 3)
                 .sorted(Comparator.comparingInt(RankingRes::rank))
@@ -868,7 +874,6 @@ public class KakaoWendyService {
             throw new RuntimeException("유효한 순위 결과가 없습니다.");
         }
 
-        // 1위 날짜 + 시간으로 시간투표 생성
         RankingRes top = top3.get(0);
         TimePollCreateRequest req = new TimePollCreateRequest();
         req.setVoteId(voteId);
@@ -877,9 +882,8 @@ public class KakaoWendyService {
 
         TimePoll timePoll = timePollService.create(req);
         if (botGroupKey != null) {
-            timePollService.updateBotGroupKey(timePoll.getId(), botGroupKey); //DB에 저장
+            timePollService.updateBotGroupKey(timePoll.getId(), botGroupKey);
         }
-        // 스케줄러 시작
         if (botGroupKey != null) {
             groupTimePollId.put(botGroupKey, timePoll.getId());
             timePollIdToGroupKey.put(timePoll.getId(), botGroupKey);
@@ -893,14 +897,12 @@ public class KakaoWendyService {
     }
 
     public KakaoResponse buildTimeRemindResponse(Long timePollId, String botGroupKey, String timing) {
-        // 1. 미투표자 조회
         List<Participant> pending = timePollService.getPendingParticipants(timePollId);
 
         if (pending.isEmpty()) {
-            return KakaoResponse.simpleText(""); // 아무도 없으면 메시지 안 보냄
+            return KakaoResponse.simpleText("");
         }
 
-        // 2. 멘션 구성
         Map<String, Map<String, String>> mentions = new LinkedHashMap<>();
         StringBuilder mentionSb = new StringBuilder();
 
@@ -923,9 +925,7 @@ public class KakaoWendyService {
             }
         }
 
-        // 3. timing별 메시지 분기
         String message;
-
         String safeTiming = timing != null ? timing : "";
 
         switch (safeTiming) {
@@ -933,20 +933,16 @@ public class KakaoWendyService {
             case "2hour":
                 message = mentionSb + " 님 투표가 시작됐어요! \n다른 분들을 위해 빠른 참여 부탁드려요 :D";
                 break;
-
             case "6hour":
                 message = "다들 " + mentionSb + " 님의 투표를 기다리고 있어요🤔";
                 break;
-
             case "12hour":
                 message = "스케쥴리 기다리다 지쳐버림…🥹\n" + mentionSb + " 님 혹시 대머리신가요…?";
                 break;
-
             default:
                 message = mentionSb + " 님 투표 부탁드려요!";
         }
 
-        // 4. 응답 생성
         return KakaoResponse.textWithQuickRepliesAndMentions(
                 message,
                 mentions.isEmpty() ? null : mentions,
@@ -955,24 +951,20 @@ public class KakaoWendyService {
     }
 
     public KakaoResponse buildTimeFinalNoticeResponse(Long timePollId, String botGroupKey) {
-        // 1. 미투표자 조회
         List<Participant> nonVoters = timePollService.getPendingParticipants(timePollId);
 
         if (nonVoters.isEmpty()) {
-            String groupKey = timePollIdToGroupKey.get(timePollId);
             kakaoTimePollScheduler.stopSchedule(timePollId);
             kakaoBotApiClient.sendEventMessage(botGroupKey, "finish_T");
             return KakaoResponse.simpleText("");
         }
 
-        // 2. 마감 시간 계산
         Instant createdAt = timePollService.getTimePollCreatedAt(timePollId);
         String deadline = createdAt
                 .atZone(ZoneId.of("Asia/Seoul"))
                 .plusHours(25)
                 .format(DateTimeFormatter.ofPattern("MM/dd HH:mm"));
 
-        // 3. 멘션 구성
         Map<String, Map<String, String>> mentions = new LinkedHashMap<>();
         StringBuilder mentionSb = new StringBuilder();
 
@@ -995,7 +987,6 @@ public class KakaoWendyService {
             }
         }
 
-        // 4. 1순위 조회
         String topResult = timePollService.getTopTimeLabel(timePollId);
 
         String message = "최후통첩✉️\n\n" + mentionSb
@@ -1015,40 +1006,8 @@ public class KakaoWendyService {
     public KakaoResponse startSession(String sessionKey, String botGroupKey) {
         KakaoResponse response = startSession(sessionKey);
 
-        // 그룹챗인 경우 botGroupKey 추가 저장
         if (botGroupKey != null && !botGroupKey.isBlank()) {
             log.info("[Kakao When:D] Group session started: sessionKey={}, botGroupKey={}", sessionKey, botGroupKey);
-        }
-
-        return response;
-    }
-
-    /**
-     * 투표 생성 (그룹챗용)
-     */
-    public KakaoResponse createVote(String sessionKey, int weeks, String botGroupKey, String botUserKey) {
-        KakaoResponse response = createVote(sessionKey, weeks, botUserKey);
-
-        if (botGroupKey != null && !botGroupKey.isBlank()) {
-            Long voteId = sessionVoteId.get(sessionKey);
-            if (voteId != null) {
-                groupVoteId.put(botGroupKey, voteId);
-                voteIdToGroupKey.put(voteId, botGroupKey);
-                voteService.updateBotGroupKey(voteId, botGroupKey); // DB에 저장
-                log.info("[Kakao When:D] Group vote mapping: botGroupKey={}, voteId={}", botGroupKey, voteId);
-
-                // 채팅방 멤버 전원 participant로 등록 ← 여기로 이동
-                try {
-                    var users = kakaoBotApiClient.getChatRoomMembers(botGroupKey);
-
-                    users.forEach(userKey
-                            -> participantService.addIfNotExists(voteId, userKey)
-                    );
-
-                } catch (Exception e) {
-                    log.warn("[Kakao] Failed to pre-register members: {}", e.getMessage());
-                }
-            }
         }
 
         return response;
@@ -1125,7 +1084,6 @@ public class KakaoWendyService {
     }
 
     private KakaoResponse textOnly(String text) {
-        // 결과 조회는 블록 멘트가 아니라 스킬 응답(simpleText)로 바로 출력
         return KakaoResponse.builder()
                 .version("2.0")
                 .template(KakaoResponse.Template.builder()
