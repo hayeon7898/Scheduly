@@ -82,6 +82,12 @@ public class KakaoSkillController {
 
         String trimmed = utterance.trim();
 
+        // 0. 참여 등록 ("참여" 버튼 클릭 시 오는 발화. 24시간 수집 창 동안에만 의미가 있음)
+        //    각 사용자가 버튼을 누르면 "그 사람만의" 요청이 오므로, botUserKey로 그 사람을 식별해 누적한다.
+        if (trimmed.equals("참여")) {
+            return ResponseEntity.ok(kakaoWendyService.joinPendingSession(sessionKey, botUserKey));
+        }
+
         // 1. 웬디 시작
         if (trimmed.equals("웬디 시작") || trimmed.equals("시작")) {
             return ResponseEntity.ok(kakaoWendyService.startSession(sessionKey, botGroupKey));
@@ -108,10 +114,9 @@ public class KakaoSkillController {
         }
 
         // 6. 웬디 {기간} (예: "웬디 2주 후", "웬디 이번주")
-        // 멘션/푸시 기능 없이, 기간 입력을 받으면 바로 투표 URL을 생성해 반환
+        //    주차를 선택하면 즉시 투표를 만들지 않고, 24시간 참여자 수집을 시작한다.
         if (trimmed.startsWith("웬디 ")) {
             String arg = trimmed.substring("웬디 ".length()).trim();
-            // 예약어는 위에서 이미 처리했지만, 안전하게 한 번 더 방어
             if (!arg.isBlank()
                     && !arg.equals("시작")
                     && !arg.equals("도움말")
@@ -121,7 +126,7 @@ public class KakaoSkillController {
                     && !arg.equals("독촉")) {
                 Integer weeks = kakaoWendyService.parseWeeks(arg);
                 if (weeks != null) {
-                    KakaoResponse response = kakaoWendyService.createVote(sessionKey, weeks, botGroupKey, botUserKey);
+                    KakaoResponse response = kakaoWendyService.startCollecting(sessionKey, weeks, botGroupKey);
                     return ResponseEntity.ok(response);
                 }
             }
@@ -132,17 +137,16 @@ public class KakaoSkillController {
 
         switch (state) {
             case WAITING_PARTICIPANTS:
-                // 참석자 입력: PRD 기준으로 botUserKey(멘션된 유저 키) 기반을 우선 사용
-                // 멘션 기반 참석자 수집 기능을 사용하지 않는 정책으로 전환
+                // 24시간 참여자 수집 창이 열려있는 동안, "참여" 외의 다른 발화가 들어온 경우
                 return ResponseEntity.ok(KakaoResponse.simpleText(
-                        "\"@스케쥴리 2주 후\"처럼 기간을 입력하면 바로 날짜 투표 링크를 만들어드릴게요!"
+                        "지금은 참여자를 모으는 중이에요! \"참여\" 버튼을 눌러주세요 :D"
                 ));
 
             case WAITING_WEEKS:
                 // 주차 선택
                 Integer weeks = kakaoWendyService.parseWeeks(trimmed);
                 if (weeks != null) {
-                    KakaoResponse response = kakaoWendyService.createVote(sessionKey, weeks, botGroupKey, botUserKey);
+                    KakaoResponse response = kakaoWendyService.startCollecting(sessionKey, weeks, botGroupKey);
                     return ResponseEntity.ok(response);
                 }
                 break;
@@ -174,18 +178,15 @@ public class KakaoSkillController {
     }
 
     /**
-     * 참석자 등록 스킬 (전용 블록) PRD 기준: 발화에서 멘션된 유저 식별 결과로 botUserKey 목록을 params로 전달받는
-     * 형태를 우선 지원 - 지원 params 키 예시: botUserKeys / participants /
-     * mentionedUserKeys
+     * 참여 등록 스킬 (전용 블록으로 분리하고 싶다면 이걸 사용. 지금은 handleMain의 "참여" 분기가 처리 중)
      */
-    @Operation(summary = "참석자 등록")
+    @Operation(summary = "참여 등록")
     @PostMapping("/participants")
     public ResponseEntity<KakaoResponse> handleParticipants(@RequestBody KakaoRequest request) {
         String sessionKey = getSessionKey(request);
-        log.info("[Kakao Skill] PARTICIPANTS - disabled. sessionKey={}", sessionKey);
-        return ResponseEntity.ok(KakaoResponse.simpleText(
-                "\"@스케쥴리 2주 후\"처럼 기간을 입력하면 날짜 투표 링크를 만들어드릴게요!"
-        ));
+        String botUserKey = request.getBotUserKey();
+        log.info("[Kakao Skill] PARTICIPANTS - sessionKey={}, botUserKey={}", sessionKey, botUserKey);
+        return ResponseEntity.ok(kakaoWendyService.joinPendingSession(sessionKey, botUserKey));
     }
 
     /**
@@ -232,8 +233,8 @@ public class KakaoSkillController {
             return ResponseEntity.ok(KakaoResponse.simpleText("주차 선택 값을 확인하지 못했어요. 다시 선택해 주세요."));
         }
 
-        String botUserKey = request.getUserRequest().getUser().getId();
-        KakaoResponse response = kakaoWendyService.createVote(sessionKey, weeks, botGroupKey, botUserKey);
+        // 주차를 선택하면 즉시 투표를 만들지 않고, 24시간 참여자 수집을 시작한다.
+        KakaoResponse response = kakaoWendyService.startCollecting(sessionKey, weeks, botGroupKey);
         return ResponseEntity.ok(response);
     }
 
@@ -265,8 +266,6 @@ public class KakaoSkillController {
     @Operation(summary = "독촉 알림")
     @PostMapping("/notify/remind")
     public ResponseEntity<KakaoResponse> handleRemind(@RequestBody KakaoRequest request) {
-        // 이벤트 발송 X
-        // 스킬 응답 텍스트로 바로 반환
         String sessionKey = getSessionKey(request);
         String botGroupKey = request.getBotGroupKey();
         String timing = request.getParam("timing");
@@ -274,24 +273,7 @@ public class KakaoSkillController {
         log.info("[Kakao Skill] REMIND - sessionKey={}, timing={}, botGroupKey={}", sessionKey, timing, botGroupKey);
         return ResponseEntity.ok(kakaoWendyService.buildRemindResponse(sessionKey, timing));
     }
-    // public ResponseEntity<KakaoResponse> handleRemind(@RequestBody KakaoRequest request) {
-    //     String sessionKey = getSessionKey(request);
 
-    //     String botGroupKey = request.getBotGroupKey();
-    //     String timing = request.getParam("timing"); // "30min", "2hour", "6hour", "12hour"
-    //     log.info("[Kakao Skill] REMIND - sessionKey={}, timing={}, botGroupKey={}", sessionKey, timing, botGroupKey);
-    //     log.info("[Kakao Skill RAW] request={}", request);
-    //     try {
-    //         log.info("[RAW REQUEST] {}", objectMapper.writeValueAsString(request));
-    //     } catch (JsonProcessingException e) {
-    //         log.error("[RAW REQUEST] JSON 변환 실패", e);
-    //     }
-    //     kakaoAsyncService.sendRemind(sessionKey, timing, botGroupKey); // ← 따로 빼기
-    //     return ResponseEntity.ok(kakaoWendyService.buildRemindResponse(sessionKey, timing));
-    //     // return ResponseEntity.ok(
-    //     //     KakaoResponse.simpleText("처리 중")
-    //     // );  
-    // }
     /**
      * 최후통첩 (24시간)
      */
@@ -336,9 +318,8 @@ public class KakaoSkillController {
      * - 지원 키: botUserKeys / participants / mentionedUserKeys - 값 형태: "k1,k2,k3"
      * 또는 "k1 k2 k3" 등(구분자는 콤마/공백/개행 모두 허용)
      *
-     * @param request 요청 DTO
-     * @param fallbackUtterance params가 없을 때 마지막 fallback(테스트/디버그용)
-     * @return 콤마(,)로 join된 botUserKey 목록 문자열
+     * (참고: 현재 참여자 수집은 handleMain의 "참여" 분기로 대체되어, 이 헬퍼는 더 이상 호출되지 않습니다.
+     *  다른 용도로 재활용할 수 있어 남겨둡니다.)
      */
     private String extractParticipantKeys(KakaoRequest request, String fallbackUtterance) {
         String raw = firstNonBlank(
@@ -378,7 +359,6 @@ public class KakaoSkillController {
             return "";
         }
 
-        // 콤마, 공백, 개행, 탭을 모두 구분자로 처리
         String[] parts = trimmed.split("[\\s,]+");
         java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
         for (String p : parts) {
@@ -401,7 +381,6 @@ public class KakaoSkillController {
             return ResponseEntity.ok(KakaoResponse.simpleText("진행 중인 투표가 없어요."));
         }
 
-        // 여기서 timePoll 생성 + 스케줄러 시작
         String timePollUrl;
         try {
             timePollUrl = kakaoWendyService.createTimePoll(sessionKey, voteId);
@@ -472,14 +451,12 @@ public class KakaoSkillController {
             return ResponseEntity.ok(KakaoResponse.simpleText("투표 정보를 찾을 수 없어요."));
         }
 
-        // 아무도 투표 안 했을 경우 
         if (status.getSubmittedCount() == 0) {
             return ResponseEntity.ok(KakaoResponse.simpleText(
                     "스케쥴리가 투표 현황을 공유드려요! :D\n\n엥 아직 아무도 투표를 안 했네요 :("
             ));
         }
 
-        // 현황 메시지 구성
         StringBuilder sb = new StringBuilder();
         sb.append("스케쥴리가 투표 현황을 공유드려요! :D\n\n");
         sb.append("[").append(status.getConfirmedDate()).append(" ")
@@ -515,7 +492,6 @@ public class KakaoSkillController {
             return ResponseEntity.ok(KakaoResponse.simpleText("진행 중인 시간 투표가 없어요."));
         }
 
-        // finalize 보장
         timePollService.finalize(timePollId);
         kakaoTimePollScheduler.stopSchedule(timePollId);
 
@@ -527,8 +503,8 @@ public class KakaoSkillController {
             return ResponseEntity.ok(KakaoResponse.simpleText("투표 정보를 찾을 수 없어요."));
         }
 
-        String confirmedDate = status.getConfirmedDate(); // "1월 28일 저녁" 형태
-        String finalizedTime = formatTime(status.getFinalizedTime()); // LocalTime → "6시"
+        String confirmedDate = status.getConfirmedDate();
+        String finalizedTime = formatTime(status.getFinalizedTime());
 
         if (finalizedTime == null) {
             return ResponseEntity.ok(KakaoResponse.simpleText("아직 투표가 완료되지 않았어요."));
