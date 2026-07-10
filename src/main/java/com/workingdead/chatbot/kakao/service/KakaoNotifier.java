@@ -138,9 +138,16 @@ public class KakaoNotifier {
             // 결과 공유
             sendToGroupIfPossible(voteId, "result_D");
 
-            // 전원 투표 완료면 완료 단계로 이동 트리거
+            // 전원 투표 완료면 완료 처리. checkAllVoted/finalizeIfNoResponse와 동일하게
+            // idempotent finalize()를 거쳐, 실제로 이번 호출이 확정시킨 경우에만 알림을 보낸다.
+            // (동시에 다른 경로가 먼저 확정시켰다면 여기선 조용히 스케줄 정리만 한다.)
             if (allSubmitted) {
-                sendToGroupIfPossible(voteId, "finish_D");
+                boolean justFinalized = voteService.finalize(voteId);
+                if (justFinalized) {
+                    log.info("[Kakao Notifier] All voted (detected in shareVoteStatus)! sessionKey={}", sessionKey);
+                    sendToGroupIfPossible(voteId, "finish_D");
+                }
+                kakaoWendyScheduler.stopSchedule(sessionKey);
             }
 
         } catch (Exception e) {
@@ -177,14 +184,14 @@ public class KakaoNotifier {
                 return;
             }
 
-            // 1. VoteStatus FINALIZED로 변경
-            voteService.finalize(voteId);  // ← 추가
+            // idempotent finalize(): 이미 다른 경로(checkAllVoted 등)가 먼저 확정시켰다면
+            // false가 반환되고, 그 경우엔 finish_D를 또 보내지 않는다.
+            boolean justFinalized = voteService.finalize(voteId);
+            if (justFinalized) {
+                sendToGroupIfPossible(voteId, "finish_D");
+            }
 
-            // 2. 그룹 메시지 발송
-            sendToGroupIfPossible(voteId, "finish_D");
-
-            // 3. 스케줄 중지
-            kakaoWendyScheduler.stopSchedule(sessionKey);  // ← 추가
+            kakaoWendyScheduler.stopSchedule(sessionKey);
 
         } catch (Exception e) {
             log.error("[Kakao Notifier] finalizeIfNoResponse failed: {}", e.getMessage(), e);
@@ -304,7 +311,7 @@ public class KakaoNotifier {
     }
 
     /**
-     * 5분마다 투표 현황 체크
+     * 1분마다 투표 현황 체크
      */
     public void checkAllVoted(String sessionKey) {
         try {
@@ -318,62 +325,20 @@ public class KakaoNotifier {
             long total = statuses.size();
 
             if (total > 0 && submitted == total) {
-                log.info("[Kakao Notifier] All voted! sessionKey={}", sessionKey);
-                voteService.finalize(voteId);
-                sendToGroupIfPossible(voteId, "finish_D");
-                kakaoWendyScheduler.stopSchedule(sessionKey); // 폴링 중지
+                // idempotent finalize(): shareVoteStatus/finalizeIfNoResponse가 먼저
+                // 확정시켰다면 false가 반환되고, 그 경우엔 finish_D를 또 보내지 않는다.
+                boolean justFinalized = voteService.finalize(voteId);
+                if (justFinalized) {
+                    log.info("[Kakao Notifier] All voted! sessionKey={}", sessionKey);
+                    sendToGroupIfPossible(voteId, "finish_D");
+                }
+                kakaoWendyScheduler.stopSchedule(sessionKey); // 폴링 중지 (누가 먼저 확정시켰든 항상 정리)
             }
         } catch (Exception e) {
             log.error("[Kakao Notifier] checkAllVoted failed: {}", e.getMessage());
         }
     }
 
-    /**
-     * 카카오 메시지 API 호출 (템플릿)
-     *
-     * 참고: 실제 사용하려면 카카오 비즈메시지 설정 필요 - 카카오톡 채널 개설 - 발신 프로필 등록 - 알림톡 템플릿 승인
-     */
-//    public boolean sendKakaoMessage(String userKey, String templateId, Map<String, String> templateArgs) {
-//        try {
-//            String adminKey = kakaoConfig.getAdminKey();
-//            if (adminKey == null || adminKey.isBlank()) {
-//                log.warn("[Kakao Notifier] Admin key not configured. Message not sent.");
-//                return false;
-//            }
-//
-//            HttpHeaders headers = new HttpHeaders();
-//            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-//            headers.set("Authorization", "KakaoAK " + adminKey);
-//
-//            // 템플릿 기반 메시지 구성
-//            Map<String, Object> templateObject = new HashMap<>();
-//            templateObject.put("object_type", "text");
-//            templateObject.put("text", templateArgs.getOrDefault("message", "웬디 알림"));
-//            templateObject.put("link", Map.of(
-//                    "web_url", templateArgs.getOrDefault("link", "https://whendy.netlify.app"),
-//                    "mobile_web_url", templateArgs.getOrDefault("link", "https://whendy.netlify.app")
-//            ));
-//
-//            String templateObjectJson = objectMapper.writeValueAsString(templateObject);
-//            String body = "receiver_uuids=[\"" + userKey + "\"]&template_object=" + templateObjectJson;
-//
-//            HttpEntity<String> request = new HttpEntity<>(body, headers);
-//
-//            ResponseEntity<String> response = kakaoRestTemplate.exchange(
-//                    KAKAO_FRIEND_MESSAGE_URL,
-//                    HttpMethod.POST,
-//                    request,
-//                    String.class
-//            );
-//
-//            log.info("[Kakao Notifier] Message sent. Response: {}", response.getBody());
-//            return response.getStatusCode().is2xxSuccessful();
-//
-//        } catch (Exception e) {
-//            log.error("[Kakao Notifier] Failed to send Kakao message: {}", e.getMessage());
-//            return false;
-//        }
-//    }
     private String getDayLabel(DayOfWeek dayOfWeek) {
         return switch (dayOfWeek) {
             case MONDAY ->

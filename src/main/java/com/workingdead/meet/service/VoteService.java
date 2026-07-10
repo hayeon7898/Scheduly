@@ -121,10 +121,27 @@ public class VoteService {
         voteRepo.save(v);
     }
 
-    public void finalize(Long voteId) {
+    /**
+     * 투표를 확정 처리한다. 이미 확정된 투표라면 아무것도 하지 않고 false를 반환한다.
+     *
+     * checkAllVoted / shareVoteStatus / finalizeIfNoResponse 세 경로가 각자 독립적으로
+     * "전원 완료"를 감지해서 이 메서드를 부를 수 있는데, 이 반환값으로 "내가 실제로 방금
+     * 확정시킨 게 맞는지"를 판단해서, 실제로 상태를 바꾼 호출자만 finish_D 알림을 보내도록
+     * 한다. 그래야 여러 경로가 거의 동시에 감지해도 알림이 중복 발송되지 않는다.
+     *
+     * @return 이번 호출로 ONGOING → FINALIZED 전환이 실제로 일어났으면 true,
+     *         이미 FINALIZED라 아무 것도 안 했으면 false
+     */
+    public boolean finalize(Long voteId) {
         Vote v = voteRepo.findById(voteId)
                 .orElseThrow(() -> new NoSuchElementException("vote not found"));
+
+        if (v.getStatus() == VoteStatus.FINALIZED) {
+            return false;
+        }
+
         v.setStatus(VoteStatus.FINALIZED);
         voteRepo.save(v);
+        return true;
     }
 }
