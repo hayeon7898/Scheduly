@@ -479,6 +479,48 @@ public class KakaoWendyService {
     }
 
     /**
+     * 24시간 참여자 수집 완료 알림 응답 생성.
+     * KakaoNotifier.sendEventToGroup(botGroupKey, "vote_created_D")로 발생한 이벤트가
+     * 관리자센터의 블록을 거쳐 이 값을 만드는 스킬(/kakao/skill/notify/vote-created)을 호출한다.
+     */
+    public KakaoResponse buildVoteCreatedResponse(String sessionKey) {
+        Long voteId = sessionVoteId.get(sessionKey);
+        String shareUrl = sessionShareUrl.get(sessionKey);
+
+        if (voteId == null || shareUrl == null) {
+            log.warn("[Kakao When:D] buildVoteCreatedResponse: voteId/shareUrl 없음. sessionKey={}", sessionKey);
+            return KakaoResponse.simpleText("");
+        }
+
+        int participantCount = participantService.getParticipants(voteId).size();
+
+        return KakaoResponse.builder()
+                .version("2.0")
+                .template(KakaoResponse.Template.builder()
+                        .outputs(List.of(
+                                KakaoResponse.Output.builder()
+                                        .simpleText(KakaoResponse.SimpleText.builder()
+                                                .text("참여자 모집이 끝났어요! (" + participantCount + "명)\n이제 날짜 투표를 시작할게요 :D")
+                                                .build())
+                                        .build(),
+                                KakaoResponse.Output.builder()
+                                        .textCard(KakaoResponse.BasicCard.builder()
+                                                .title("투표 생성 완료!!")
+                                                .buttons(List.of(
+                                                        KakaoResponse.Button.builder()
+                                                                .label("투표하러가기")
+                                                                .action("webLink")
+                                                                .webLinkUrl(shareUrl)
+                                                                .build()
+                                                ))
+                                                .build())
+                                        .build()
+                        ))
+                        .build())
+                .build();
+    }
+
+    /**
      * 주차 파싱 (0 = 이번 주, 1~6 = n주 뒤)
      */
     public Integer parseWeeks(String input) {
