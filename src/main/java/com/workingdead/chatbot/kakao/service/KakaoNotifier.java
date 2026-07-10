@@ -135,20 +135,22 @@ public class KakaoNotifier {
                 return;
             }
 
-            // 결과 공유
-            sendToGroupIfPossible(voteId, "result_D");
-
-            // 전원 투표 완료면 완료 처리. checkAllVoted/finalizeIfNoResponse와 동일하게
-            // idempotent finalize()를 거쳐, 실제로 이번 호출이 확정시킨 경우에만 알림을 보낸다.
-            // (동시에 다른 경로가 먼저 확정시켰다면 여기선 조용히 스케줄 정리만 한다.)
             if (allSubmitted) {
+                // 전원 완료 시점엔 "누가 먼저 확정시켰는지"를 원자적으로 가려서,
+                // 이긴 호출만 result_D → finish_D를 순서대로 보낸다.
+                // (진 호출은 이미 다른 경로가 같은 순서로 다 보낸 뒤이므로 아무 것도 안 보냄 —
+                //  안 그러면 "완료" 뒤에 뒤늦은 "현황 공유"가 또 도착해 순서가 역전됨)
                 boolean justFinalized = voteService.finalize(voteId);
                 if (justFinalized) {
-                    log.info("[Kakao Notifier] All voted (detected in shareVoteStatus)! sessionKey={}", sessionKey);
+                    log.info("[Kakao Notifier] All voted (finalized in shareVoteStatus)! sessionKey={}", sessionKey);
                     sendToGroupIfPossible(voteId, "finish_D");
                 }
                 kakaoWendyScheduler.stopSchedule(sessionKey);
+                return;
             }
+
+            // 여기 도달하는 건 "아직 전원 완료는 아니지만 3분 지났거나 과반 이상"인 경우 — 현황만 공유
+            sendToGroupIfPossible(voteId, "result_D");
 
         } catch (Exception e) {
             log.error("[Kakao Notifier] Failed to share vote status: {}", e.getMessage());
@@ -325,11 +327,11 @@ public class KakaoNotifier {
             long total = statuses.size();
 
             if (total > 0 && submitted == total) {
-                // idempotent finalize(): shareVoteStatus/finalizeIfNoResponse가 먼저
-                // 확정시켰다면 false가 반환되고, 그 경우엔 finish_D를 또 보내지 않는다.
+                // shareVoteStatus()와 동일한 원자적 패턴: 이긴 호출만 result_D → finish_D를
+                // 순서대로 보내고, 진 호출은 스케줄 정리만 한다.
                 boolean justFinalized = voteService.finalize(voteId);
                 if (justFinalized) {
-                    log.info("[Kakao Notifier] All voted! sessionKey={}", sessionKey);
+                    log.info("[Kakao Notifier] All voted (finalized in checkAllVoted)! sessionKey={}", sessionKey);
                     sendToGroupIfPossible(voteId, "finish_D");
                 }
                 kakaoWendyScheduler.stopSchedule(sessionKey); // 폴링 중지 (누가 먼저 확정시켰든 항상 정리)
