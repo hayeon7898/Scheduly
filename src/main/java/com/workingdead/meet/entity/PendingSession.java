@@ -31,8 +31,11 @@ public class PendingSession {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 개인챗이면 userKey, 그룹챗이면 botGroupKey */
-    @Column(name = "session_key", nullable = false, unique = true)
+    /** 개인챗이면 userKey, 그룹챗이면 botGroupKey.
+     *  주의: 전역 unique 아님 — 같은 sessionKey로 수집→완료→재시작을 반복하면 여러 행이 쌓임.
+     *  "동시에 COLLECTING 상태는 하나만" 규칙은 startCollecting()에서 기존 COLLECTING 행을
+     *  지우고 새로 넣는 방식으로 애플리케이션 레벨에서 보장한다. */
+    @Column(name = "session_key", nullable = false)
     private String sessionKey;
 
     @Column(name = "bot_group_key")

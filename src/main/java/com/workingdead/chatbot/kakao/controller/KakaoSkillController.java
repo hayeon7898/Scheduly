@@ -92,27 +92,27 @@ public class KakaoSkillController {
         }
 
         // 1. 웬디 시작
-        if (trimmed.equals("웬디 시작") || trimmed.equals("시작")) {
+        if (trimmed.equals("시작")) {
             return ResponseEntity.ok(kakaoWendyService.startSession(sessionKey, botGroupKey));
         }
 
         // 2. 도움말
-        if (trimmed.equals("웬디 도움말") || trimmed.equals("도움말") || trimmed.equals("/help")) {
+        if (trimmed.equals("도움말") || trimmed.equals("/help")) {
             return ResponseEntity.ok(kakaoWendyService.help());
         }
 
         // 3. 웬디 종료
-        if (trimmed.equals("웬디 종료") || trimmed.equals("종료")) {
+        if (trimmed.equals("종료")) {
             return ResponseEntity.ok(kakaoWendyService.endSession(sessionKey));
         }
 
         // 4. 웬디 결과
-        if (trimmed.equals("웬디 결과") || trimmed.equals("결과") || trimmed.equals("결과 확인")) {
+        if (trimmed.equals("결과") || trimmed.equals("결과 확인")) {
             return ResponseEntity.ok(kakaoWendyService.getVoteResult(sessionKey));
         }
 
         // 5. 웬디 재투표
-        if (trimmed.equals("웬디 재투표") || trimmed.equals("재투표") || trimmed.equals("재투표할래요")) {
+        if (trimmed.equals("재투표") || trimmed.equals("재투표할래요")) {
             return ResponseEntity.ok(kakaoWendyService.revote(sessionKey));
         }
 
