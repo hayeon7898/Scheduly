@@ -1,5 +1,7 @@
 package com.workingdead.chatbot.kakao.scheduler;
 
+import org.springframework.beans.factory.annotation.Value;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -30,7 +32,14 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class KakaoWendyScheduler {
 
-    private static final long COLLECTION_WINDOW_SECONDS = 24 * 3600;
+    /**
+     * 24시간 참여자 수집 창 길이(초). 기본 86400초(24시간).
+     * 테스트 시엔 application.yml이나 환경변수로 짧게 오버라이드하면 됨(코드/커밋 안 건드림):
+     *   wendy.collection-window-seconds: 180   (application-test.yml 등)
+     *   또는 환경변수 WENDY_COLLECTION_WINDOW_SECONDS=180
+     */
+    @Value("${wendy.collection-window-seconds:86400}")
+    private long collectionWindowSeconds;
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private final KakaoNotifier notifier;
@@ -121,7 +130,7 @@ public class KakaoWendyScheduler {
     private void restoreCollectionSchedule(PendingSession pending) {
         String sessionKey = pending.getSessionKey();
         long elapsed = Duration.between(pending.getCreatedAt(), Instant.now()).getSeconds();
-        long remaining = COLLECTION_WINDOW_SECONDS - elapsed;
+        long remaining = collectionWindowSeconds - elapsed;
 
         if (remaining <= 0) {
             log.info("[WendyScheduler] Collection window already passed while server was down. "
@@ -163,7 +172,7 @@ public class KakaoWendyScheduler {
 
         ScheduledFuture<?> task = scheduler.schedule(
                 () -> kakaoWendyService.finalizeCollecting(sessionKey),
-                COLLECTION_WINDOW_SECONDS, TimeUnit.SECONDS
+                collectionWindowSeconds, TimeUnit.SECONDS
         );
         collectionTasks.put(sessionKey, task);
         log.info("[WendyScheduler] Collection schedule started: sessionKey={}", sessionKey);

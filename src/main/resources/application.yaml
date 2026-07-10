@@ -72,3 +72,6 @@ kakao:
   admin-key: ${KAKAO_ADMIN_KEY:}
   channel-id: ${KAKAO_CHANNEL_ID:}
   bot-id: ${KAKAO_BOT_ID:}
+  
+wendy:
+  collection-window-seconds: 180
