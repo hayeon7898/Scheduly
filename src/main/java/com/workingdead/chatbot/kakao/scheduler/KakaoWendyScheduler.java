@@ -63,14 +63,28 @@ public class KakaoWendyScheduler {
     }
 
     @PostConstruct
+    public void logCollectionWindowConfig() {
+        log.info("[WendyScheduler] collection window = {}초 (약 {}분)", collectionWindowSeconds, collectionWindowSeconds / 60.0);
+    }
+
+    @PostConstruct
     public void restoreSchedules() {
         List<Vote> ongoingVotes = voteRepository.findByStatus(VoteStatus.ONGOING);
         log.info("[WendyScheduler] Restoring {} schedules on startup", ongoingVotes.size());
+
+        // 같은 sessionKey(botGroupKey)로 ONGOING Vote가 여러 개 쌓여있어도,
+        // 폴링 루프는 sessionKey당 딱 하나만 떠야 한다. 안 그러면 재배포마다 중복 누적됨.
+        java.util.Set<String> restoredSessionKeys = new java.util.HashSet<>();
 
         for (Vote vote : ongoingVotes) {
             String botGroupKey = vote.getBotGroupKey();
             if (botGroupKey == null || botGroupKey.isBlank()) {
                 log.warn("[WendyScheduler] No botGroupKey for voteId={}. Skip.", vote.getId());
+                continue;
+            }
+            if (!restoredSessionKeys.add(botGroupKey)) {
+                log.warn("[WendyScheduler] sessionKey={}에 이미 스케줄 복구함. voteId={}는 중복이라 건너뜀 "
+                        + "(오래된 ONGOING Vote가 DB에 남아있는 상태로 보임, 정리 필요).", botGroupKey, vote.getId());
                 continue;
             }
             restoreSchedule(vote, botGroupKey);
