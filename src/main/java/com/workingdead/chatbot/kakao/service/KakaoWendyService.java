@@ -108,6 +108,12 @@ public class KakaoWendyService {
      * 세션 시작 (웬디 시작)
      */
     public KakaoResponse startSession(String userKey) {
+        // 이전 사이클(종료/재투표 없이 "시작"만 반복한 경우)의 좀비 스케줄이 남아있지 않도록 정리
+        kakaoWendyScheduler.stopSchedule(userKey);
+        kakaoWendyScheduler.stopCollectionSchedule(userKey);
+        pendingSessionRepository.findBySessionKeyAndStatus(userKey, PendingSessionStatus.COLLECTING)
+                .ifPresent(pendingSessionRepository::delete);
+
         activeSessions.add(userKey);
         participants.put(userKey, new ArrayList<>());
         participantDisplayNames.put(userKey, new ArrayList<>());
@@ -500,12 +506,12 @@ public class KakaoWendyService {
                         .outputs(List.of(
                                 KakaoResponse.Output.builder()
                                         .simpleText(KakaoResponse.SimpleText.builder()
-                                                .text("참여자 모집이 끝났어요! (" + participantCount + "명)\n이제 날짜 투표를 시작할게요 :D")
+                                                .text("참여자 " + participantCount + "명 확인됐어요! \n이제 일정 투표를 시작할게요😊")
                                                 .build())
                                         .build(),
                                 KakaoResponse.Output.builder()
                                         .textCard(KakaoResponse.BasicCard.builder()
-                                                .title("투표 생성 완료!!")
+                                                .title("일정 투표가 시작됐어요! 24시간 안에 투표해 주세요😊")
                                                 .buttons(List.of(
                                                         KakaoResponse.Button.builder()
                                                                 .label("투표하러가기")
