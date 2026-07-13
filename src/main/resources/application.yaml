@@ -73,5 +73,5 @@ kakao:
   channel-id: ${KAKAO_CHANNEL_ID:}
   bot-id: ${KAKAO_BOT_ID:}
   
-wendy:
-  collection-window-seconds: 180
+# wendy:
+#   collection-window-seconds: 180 # test용도
