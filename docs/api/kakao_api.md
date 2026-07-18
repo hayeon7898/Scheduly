@@ -5,12 +5,11 @@
 ## 📝 기본 정보
 
 - Base path: `/kakao/skill`
-- 모든 요청은 `POST` (헬스체크만 `GET`)
 - 요청 본문: `KakaoRequest` (카카오 SkillRequest 형식)
 - 응답 본문: `KakaoResponse` (카카오 SkillResponse 형식, `version: "2.0"`)
 
 ## ⚙️ APIs
-### 1. 대화 흐름 (사용자 발화 처리)
+#### 1. 대화 흐름 (사용자 발화 처리)
 
 | Method | Endpoint | 설명 | 비고 |
 |---|---|---|---|
@@ -23,7 +22,7 @@
 | POST | `/kakao/skill/revote` | 재투표 | 기존 투표/수집 세션 정리 후 세션 재시작 |
 | POST | `/kakao/skill/help` | 도움말 | "아래 버튼을 눌러서 확인하세요" + `action:guide` 버튼 (실제 명령어 목록 문구는 관리자센터의 "챗봇 도움말" 설정에서 관리) |
 
-### 2. 알림 (Event API 콜백)
+#### 2. 알림 (Event API 콜백)
 
 카카오 Event API(`sendEventMessage`)로 이벤트를 발송하면, 관리자센터에 등록된 블록을 거쳐 아래 스킬들이 호출되어 실제 메시지 내용을 만듦.
 
@@ -36,7 +35,7 @@
 
 > 이 4개는 **관리자센터에 이벤트 이름이 정확히 등록되어 있어야** 동작함. 코드에서 `sendEventMessage(botGroupKey, "이벤트이름")`을 아무리 정확히 호출해도, 관리자센터의 해당 블록 + 이벤트 설정이 없으면 카카오가 `404 Invalid Event name`으로 거부함.
 
-### 3. 시간 투표 (TimePoll)
+#### 3. 시간 투표 (TimePoll)
 
 날짜 투표 확정 이후, 구체적인 시간을 정하는 2차 투표 흐름.
 

@@ -1,12 +1,11 @@
-# 투표 관련 APIs
+# vote 관련 APIs
 
-`VoteController` (`/votes`) 기준. 투표(Vote) 생성/조회/수정/삭제를 담당.
-결과 집계(`VoteResultController`)는 같은 `/votes` 경로를 쓰고 엔드포인트도 하나뿐이라 이 문서에 함께 정리.
+- `VoteController` (`/votes`) 기준. 
+- 투표(Vote) 생성/조회/수정/삭제를 담당.
 
 ## 📝 기본 정보
 
 - Base path: `/votes`
-- 요청 방식: GET/POST/PATCH/DELETE
 - 요청 본문: `VoteDtos.CreateVoteReq`, `VoteDtos.UpdateVoteReq`
 - 응답 본문: `VoteDtos.VoteSummary`, `VoteDtos.VoteDetail`, `VoteResultDtos.VoteResultRes`
 - 인증: 없음

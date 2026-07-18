@@ -1,18 +1,17 @@
-# 참여자 관련 APIs
+# participants 관련 APIs
 
-`ParticipantController` (`""`, 경로가 `/votes/{voteId}/participants`와 `/participants/{id}`로 나뉘어 있음) 기준. 
-참여자 등록/조회/수정/삭제 및 일정·우선순위 제출을 담당.
+- `ParticipantController` 기준. 
+- 참여자 등록/조회/수정/삭제 및 일정·우선순위 제출을 담당.
 
 ## 📝 기본 정보
 
 - Base path: 없음 (컨트롤러 자체는 `@RequestMapping("")`), 경로가 리소스별로 `/votes/{voteId}/participants...` 또는 `/participants/{id}...`로 나뉨
-- 요청 방식: GET/POST/PATCH/DELETE 혼합
 - 요청 본문: `ParticipantDtos.*`, `PriorityDtos.PriorityRequest`
 - 응답 본문: `ParticipantDtos.*`, `PriorityDtos.PriorityResponse`
 - 인증: 없음
 
 ## ⚙️ APIs
-### 1. 참여자 등록/조회/삭제
+#### 1. 참여자 등록/조회/삭제
 
 | Method | Endpoint | 설명 | 비고 |
 |---|---|---|---|
@@ -21,14 +20,14 @@
 | GET | `/votes/{voteId}/participants` | 참여자 목록 조회 (로그인 칩) | `displayName == "미등록"` 또는 빈 값인 참여자는 응답에서 제외 |
 | DELETE | `/participants/{participantId}` | 참여자 삭제 | |
 
-### 2. 참여자 정보 수정
+#### 2. 참여자 정보 수정
 
 | Method | Endpoint | 설명 | 비고 |
 |---|---|---|---|
 | PATCH | `/participants/{participantId}` | 참여자 기본 정보 수정 | `displayName` 등 |
 | PATCH | `/participants/{id}/info` | 참여자 정보 부분 수정 | 리플렉션으로 요청 Map의 key를 `Participant` 필드에 직접 매핑. 필드명이 요청 key와 정확히 일치해야 함 |
 
-### 3. 우선순위 및 일정 제출/조회
+#### 3. 우선순위 및 일정 제출/조회
 
 | Method | Endpoint | 설명 | 비고 |
 |---|---|---|---|
