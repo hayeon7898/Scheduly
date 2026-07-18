@@ -81,8 +81,13 @@ public class KakaoSkillController {
         }
 
         // 그룹챗에서는 버튼 클릭도 "@봇이름 내용" 형태로 발화가 오므로, 앞의 멘션은 떼고 매칭한다.
-        // 예: "@스케쥴리 참여할래요" → "참여할래요"
-        String trimmed = utterance.trim().replaceFirst("^@\\S+\\s+", "");
+        // 예: "@스케쥴리 참여할래요" → "참여할래요", "@스케쥴리"(멘션만) → ""
+        String trimmed = utterance.trim().replaceFirst("^@\\S+\\s*", "");
+
+        // 멘션만 하고 아무 내용도 없으면 도움말을 보여준다.
+        if (trimmed.isBlank()) {
+            return ResponseEntity.ok(kakaoWendyService.help());
+        }
 
         // 0. 참여 등록 ("참여" 버튼 클릭 시 오는 발화. 24시간 수집 창 동안에만 의미가 있음)
         //    각 사용자가 버튼을 누르면 "그 사람만의" 요청이 오므로, botUserKey로 그 사람을 식별해 누적한다.
@@ -91,51 +96,33 @@ public class KakaoSkillController {
             return ResponseEntity.ok(kakaoWendyService.joinPendingSession(sessionKey, botUserKey));
         }
 
-        // 1. 웬디 시작
-        if (trimmed.equals("웬디 시작") || trimmed.equals("시작")) {
+        // 1. 시작
+        if (trimmed.equals("시작")) {
             return ResponseEntity.ok(kakaoWendyService.startSession(sessionKey, botGroupKey));
         }
 
         // 2. 도움말
-        if (trimmed.equals("웬디 도움말") || trimmed.equals("도움말") || trimmed.equals("/help")) {
+        if (trimmed.equals("도움말")) {
             return ResponseEntity.ok(kakaoWendyService.help());
         }
 
-        // 3. 웬디 종료
-        if (trimmed.equals("웬디 종료") || trimmed.equals("종료")) {
+        // 3. 종료
+        if (trimmed.equals("종료")) {
             return ResponseEntity.ok(kakaoWendyService.endSession(sessionKey));
         }
 
-        // 4. 웬디 결과
-        if (trimmed.equals("웬디 결과") || trimmed.equals("결과") || trimmed.equals("결과 확인")) {
+        // 4. 결과
+        if (trimmed.equals("결과")) {
             return ResponseEntity.ok(kakaoWendyService.getVoteResult(sessionKey));
         }
 
-        // 5. 웬디 재투표
-        if (trimmed.equals("웬디 재투표") || trimmed.equals("재투표") || trimmed.equals("재투표할래요")) {
+        // 5. 재투표
+        if (trimmed.equals("재투표") || trimmed.equals("재투표할래요")) {
             return ResponseEntity.ok(kakaoWendyService.revote(sessionKey));
         }
 
-        // 6. 웬디 {기간} (예: "웬디 2주 후", "웬디 이번주")
-        //    주차를 선택하면 즉시 투표를 만들지 않고, 24시간 참여자 수집을 시작한다.
-        if (trimmed.startsWith("웬디 ")) {
-            String arg = trimmed.substring("웬디 ".length()).trim();
-            if (!arg.isBlank()
-                    && !arg.equals("시작")
-                    && !arg.equals("도움말")
-                    && !arg.equals("종료")
-                    && !arg.equals("결과")
-                    && !arg.equals("재투표")
-                    && !arg.equals("독촉")) {
-                Integer weeks = kakaoWendyService.parseWeeks(arg);
-                if (weeks != null) {
-                    KakaoResponse response = kakaoWendyService.startCollecting(sessionKey, weeks, botGroupKey);
-                    return ResponseEntity.ok(response);
-                }
-            }
-        }
-
-        // 세션 상태에 따른 처리
+        // 세션 상태에 따른 처리 ("시작" 이후 WAITING_WEEKS 상태에서 "이번"/"1주" 등
+        // 기간 텍스트가 오면 여기서 주차로 파싱함)
         SessionState state = kakaoWendyService.getSessionState(sessionKey);
 
         switch (state) {

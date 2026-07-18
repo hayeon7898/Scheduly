@@ -506,12 +506,12 @@ public class KakaoWendyService {
                         .outputs(List.of(
                                 KakaoResponse.Output.builder()
                                         .simpleText(KakaoResponse.SimpleText.builder()
-                                                .text("참여자 " + participantCount + "명 확인됐어요! \n이제 일정 투표를 시작할게요😊")
+                                                .text("참여자 모집이 끝났어요! (" + participantCount + "명)\n이제 날짜 투표를 시작할게요 :D")
                                                 .build())
                                         .build(),
                                 KakaoResponse.Output.builder()
                                         .textCard(KakaoResponse.BasicCard.builder()
-                                                .title("일정 투표가 시작됐어요! 24시간 안에 투표해 주세요😊")
+                                                .title("투표 생성 완료!!")
                                                 .buttons(List.of(
                                                         KakaoResponse.Button.builder()
                                                                 .label("투표하러가기")
@@ -655,11 +655,30 @@ public class KakaoWendyService {
 
     /**
      * 도움말
+     *
+     * 실제 명령어 목록(@시작/@종료 등) 텍스트는 여기서 만들지 않는다.
+     * 버튼의 action을 "guide"로 두면, 관리자센터에 이미 설정해둔 "챗봇 도움말" 콘텐츠를
+     * 카카오가 자동으로 보여준다. 그 콘텐츠 문구를 바꾸고 싶으면 관리자센터에서 수정하면 됨.
      */
     public KakaoResponse help() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("commands", List.of("시작", "종료", "재투표", "결과"));
-        return dataOnly(data);
+        return KakaoResponse.builder()
+                .version("2.0")
+                .template(KakaoResponse.Template.builder()
+                        .outputs(List.of(
+                                KakaoResponse.Output.builder()
+                                        .textCard(KakaoResponse.BasicCard.builder()
+                                                .description("아래 버튼을 눌러서 확인하세요.")
+                                                .buttons(List.of(
+                                                        KakaoResponse.Button.builder()
+                                                                .label("도움말")
+                                                                .action("guide")
+                                                                .build()
+                                                ))
+                                                .build())
+                                        .build()
+                        ))
+                        .build())
+                .build();
     }
 
     /**
