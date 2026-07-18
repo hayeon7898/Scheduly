@@ -1,4 +1,4 @@
-# `/participant` Endpoint APIs
+# 참여자 관련 APIs
 
 `ParticipantController` (`""`, 경로가 `/votes/{voteId}/participants`와 `/participants/{id}`로 나뉘어 있음) 기준. 
 참여자 등록/조회/수정/삭제 및 일정·우선순위 제출을 담당.

@@ -1,4 +1,4 @@
-# /kakao/skill Endpoint APIs
+# kakao 관련 APIs
 
 `KakaoSkillController` (`/kakao/skill`) 기준. 
 
