@@ -28,7 +28,6 @@ import java.time.LocalTime;
  * - 개인챗: userKey 기반 세션 
  * - 그룹챗: botGroupKey 기반 세션
  */
-
 @Tag(name = "Kakao Chatbot", description = "카카오 챗봇 스킬 API")
 @RestController
 @RequestMapping("/kakao/skill")
@@ -51,8 +50,15 @@ public class KakaoSkillController {
     private String botNamesConfig;
 
     /**
-     * utterance가 우리 봇 이름 중 하나로 멘션된 게 맞으면, 그 멘션을 뗀 나머지 텍스트를 반환.
-     * 우리 봇 멘션이 아닌 것으로 보이면 null을 반환한다 (다른 사람 언급 등 오작동 방지).
+     * utterance가 우리 봇 이름 중 하나로 멘션됐으면 그 멘션을 뗀 나머지 텍스트를 반환.
+     *
+     * 주의: 모든 발화에 멘션이 붙어있는 게 아니다.
+     * - 버튼 클릭으로 오는 발화: "@스케쥴리 참여할래요"처럼 멘션이 텍스트에 그대로 포함됨
+     * - 사용자가 직접 타이핑한 발화: 카카오가 라우팅 시점에 이미 멘션을 떼고 "약속 잡아줘"처럼
+     *   순수 텍스트만 넘겨줌 (애초에 우리 봇에게 라우팅된 것 자체가 멘션 확인이 끝났다는 뜻)
+     *
+     * 그래서 "@"로 아예 시작하지 않으면 정상 발화로 보고 그대로 통과시키고,
+     * "@"로 시작하는데 우리 봇 이름이 아닌 경우에만 다른 대상 언급으로 보고 무시(null)한다.
      */
     private String stripBotMention(String utterance) {
         if (utterance == null) {
@@ -71,7 +77,14 @@ public class KakaoSkillController {
                 return rest.replaceFirst("^\\s+", "");
             }
         }
-        return null; // 우리 봇 멘션이 아님 - 다른 사람/다른 봇이 언급된 메시지일 가능성
+
+        // "@"로 시작하지 않으면, 카카오가 이미 우리 봇 앞으로 라우팅하며 멘션을 뗀
+        // 일반 발화로 간주하고 그대로 통과시킨다.
+        if (!trimmedRaw.startsWith("@")) {
+            return trimmedRaw;
+        }
+
+        return null; // "@"로 시작하는데 우리 봇 이름이 아님 - 다른 대상 언급으로 보고 무시
     }
 
     /**
@@ -128,7 +141,7 @@ public class KakaoSkillController {
             return ResponseEntity.ok(kakaoWendyService.help());
         }
 
-        // 0. 참여 등록 ("참여" 버튼 클릭 시 오는 발화. 6시간 수집 창 동안에만 의미가 있음)
+        // 0. 참여 등록 ("참여" 버튼 클릭 시 오는 발화. 24시간 수집 창 동안에만 의미가 있음)
         //    각 사용자가 버튼을 누르면 "그 사람만의" 요청이 오므로, botUserKey로 그 사람을 식별해 누적한다.
         //    버튼의 messageText가 무시되고 label("참여할래요")이 그대로 전송되는 것으로 보여, 둘 다 받아준다.
         if (trimmed.equals("참여") || trimmed.equals("참여할래요")) {
@@ -309,7 +322,7 @@ public class KakaoSkillController {
     }
 
     /**
-     * 참여자 수집 완료 알림 (6시간 경과 후 Event API가 트리거하는 블록의 스킬)
+     * 참여자 수집 완료 알림 (24시간 경과 후 Event API가 트리거하는 블록의 스킬)
      */
     @Operation(summary = "참여자 수집 완료 알림")
     @PostMapping("/notify/vote-created")
