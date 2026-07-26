@@ -309,7 +309,7 @@ public class KakaoSkillController {
     }
 
     /**
-     * 참여자 수집 완료 알림 (24시간 경과 후 Event API가 트리거하는 블록의 스킬)
+     * 참여자 수집 완료 알림 (6시간 경과 후 Event API가 트리거하는 블록의 스킬)
      */
     @Operation(summary = "참여자 수집 완료 알림")
     @PostMapping("/notify/vote-created")

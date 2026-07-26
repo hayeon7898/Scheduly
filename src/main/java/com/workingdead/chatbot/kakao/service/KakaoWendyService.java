@@ -218,7 +218,7 @@ public class KakaoWendyService {
 
         sessionStates.put(sessionKey, SessionState.WAITING_PARTICIPANTS);
 
-        // 4. 6시간 수집 타이머 시작
+        // 4. 24시간 수집 타이머 시작
         kakaoWendyScheduler.startCollectionSchedule(sessionKey);
 
         log.info("[Kakao When:D] Collecting started: sessionKey={}, weeks={}, startDate={}, endDate={}",
