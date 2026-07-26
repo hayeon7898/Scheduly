@@ -39,7 +39,9 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 카카오 챗봇용 웬디 서비스 Discord와 독립적으로 세션 관리 - 개인챗: userKey 기반 - 그룹챗: botGroupKey 기반
+ * 카카오 챗봇용 웬디 서비스 Discord와 독립적으로 세션 관리 
+ * - 개인챗: userKey 기반 
+ * - 그룹챗: botGroupKey 기반
  */
 @Service
 @Slf4j
@@ -185,7 +187,7 @@ public class KakaoWendyService {
 
     // ========== 참여자 수집 (신규 흐름) ==========
     /**
-     * 주차 선택 완료 → 날짜범위 확정 + 24시간 참여자 수집 시작
+     * 주차 선택 완료 → 날짜범위 확정 + 6시간 참여자 수집 시작
      * (기존 createVote()를 즉시 호출하는 대신, 이 메서드가 대체합니다.)
      */
     @Transactional
@@ -216,7 +218,7 @@ public class KakaoWendyService {
 
         sessionStates.put(sessionKey, SessionState.WAITING_PARTICIPANTS);
 
-        // 4. 24시간 수집 타이머 시작
+        // 4. 6시간 간 수집 타이머 시작
         kakaoWendyScheduler.startCollectionSchedule(sessionKey);
 
         log.info("[Kakao When:D] Collecting started: sessionKey={}, weeks={}, startDate={}, endDate={}",
@@ -230,15 +232,16 @@ public class KakaoWendyService {
                         .outputs(List.of(
                                 KakaoResponse.Output.builder()
                                         .simpleText(KakaoResponse.SimpleText.builder()
-                                                .text(weekLabel + "를 선택하셨어요\n24시간 동안 참여자를 모을게요 :D")
+                                                .text(weekLabel + "를 선택하셨어요\n6시간 동안 참여자를 모을게요 :D")
                                                 .build())
                                         .build(),
                                 KakaoResponse.Output.builder()
                                         .textCard(KakaoResponse.BasicCard.builder()
                                                 .title("이 약속에 참여하시나요?")
-                                                .description("아래 버튼을 눌러주세요!\n24시간 후에 모인 분들끼리 투표를 시작할게요🙂")
+                                                .description("아래 버튼을 눌러주세요!\n6시간 후에 모인 분들끼리 투표를 시작할게요🙂")
                                                 .buttons(List.of(
-                                                        KakaoResponse.messageButton("참여할래요", "참여")
+                                                        KakaoResponse.messageButton("참여할래요", "참여"),
+                                                        KakaoResponse.messageButton("모집 종료할게요", "모집종료")
                                                 ))
                                                 .build())
                                         .build()
@@ -273,6 +276,38 @@ public class KakaoWendyService {
                 sessionKey, botUserKey, pending.getBotUserKeys().size());
 
         return KakaoResponse.simpleText("참여 완료했어요! 🙌");
+    }
+
+    /**
+     * "모집 종료할게요" 버튼 처리. 6시간(설정값) 다 안 기다리고, 지금까지 모인 참여자로
+     * 즉시 투표를 생성한다. 예약된 타이머는 취소하고, finalizeCollecting()을 바로 호출.
+     *
+     * finalizeCollecting()이 내부적으로 "vote_created_D" 이벤트를 발송해 채팅방에
+     * 완료 카드를 보여주므로, 이 메서드의 스킬 응답 자체는 빈 텍스트로 둔다
+     * (타이머로 자연 종료될 때와 동일한 방식 — 알림 경로를 하나로 통일).
+     */
+    @Transactional
+    public KakaoResponse closeCollectionNow(String sessionKey) {
+        Optional<PendingSession> opt = pendingSessionRepository
+                .findBySessionKeyAndStatus(sessionKey, PendingSessionStatus.COLLECTING);
+
+        if (opt.isEmpty()) {
+            return KakaoResponse.simpleText("지금은 모집 중이 아니에요 :(");
+        }
+
+        PendingSession pending = opt.get();
+        if (pending.getBotUserKeys().isEmpty()) {
+            return KakaoResponse.simpleText(
+                    "아직 아무도 참여하지 않았어요! \n스케쥴리를 종료하고 싶으면 @스케쥴리 종료를 입력해주세요!"
+            );
+        }
+
+        log.info("[Kakao When:D] Collection closed early: sessionKey={}", sessionKey);
+
+        kakaoWendyScheduler.stopCollectionSchedule(sessionKey);
+        finalizeCollecting(sessionKey);
+
+        return KakaoResponse.simpleText("");
     }
 
     /**

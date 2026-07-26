@@ -24,8 +24,9 @@ import java.time.LocalTime;
 /**
  * 카카오 i 오픈빌더 스킬 서버 컨트롤러
  *
- * 카카오톡 챗봇에서 발화를 받아 처리하고 응답을 반환합니다. - 개인챗: userKey 기반 세션 - 그룹챗: botGroupKey 기반
- * 세션
+ * 카카오톡 챗봇에서 발화를 받아 처리하고 응답을 반환합니다. 
+ * - 개인챗: userKey 기반 세션 
+ * - 그룹챗: botGroupKey 기반 세션
  */
 @Tag(name = "Kakao Chatbot", description = "카카오 챗봇 스킬 API")
 @RestController
@@ -94,6 +95,11 @@ public class KakaoSkillController {
         //    버튼의 messageText가 무시되고 label("참여할래요")이 그대로 전송되는 것으로 보여, 둘 다 받아준다.
         if (trimmed.equals("참여") || trimmed.equals("참여할래요")) {
             return ResponseEntity.ok(kakaoWendyService.joinPendingSession(sessionKey, botUserKey));
+        }
+
+        // 0-1. 모집 조기 종료 ("모집 종료할게요" 버튼 클릭 시)
+        if (trimmed.equals("모집종료") || trimmed.equals("모집 종료할게요")) {
+            return ResponseEntity.ok(kakaoWendyService.closeCollectionNow(sessionKey));
         }
 
         // 1. 시작
@@ -265,7 +271,7 @@ public class KakaoSkillController {
     }
 
     /**
-     * 참여자 수집 완료 알림 (24시간 경과 후 Event API가 트리거하는 블록의 스킬)
+     * 참여자 수집 완료 알림 (6시간 경과 후 Event API가 트리거하는 블록의 스킬)
      */
     @Operation(summary = "참여자 수집 완료 알림")
     @PostMapping("/notify/vote-created")
