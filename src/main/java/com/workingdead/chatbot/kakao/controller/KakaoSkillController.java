@@ -24,9 +24,11 @@ import java.time.LocalTime;
 /**
  * 카카오 i 오픈빌더 스킬 서버 컨트롤러
  *
- * 카카오톡 챗봇에서 발화를 받아 처리하고 응답을 반환합니다. - 개인챗: userKey 기반 세션 - 그룹챗: botGroupKey 기반
- * 세션
+ * 카카오톡 챗봇에서 발화를 받아 처리하고 응답을 반환합니다. 
+ * - 개인챗: userKey 기반 세션 
+ * - 그룹챗: botGroupKey 기반 세션
  */
+
 @Tag(name = "Kakao Chatbot", description = "카카오 챗봇 스킬 API")
 @RestController
 @RequestMapping("/kakao/skill")
@@ -38,6 +40,39 @@ public class KakaoSkillController {
     private final TimePollService timePollService;
     private final ObjectMapper objectMapper;
     private final KakaoTimePollScheduler kakaoTimePollScheduler;
+
+    /**
+     * 운영/개발 채널의 봇 이름을 콤마로 구분해서 설정. 기본값: "스케쥴리,스케쥴리 개발용"
+     * 메시지가 이 이름들 중 하나로 멘션된 게 아니면(=다른 사람/다른 봇이 언급된 메시지로 보이면)
+     * 아무 처리도 하지 않는다. Kakao 플랫폼이 원래 우리 봇 멘션이 있는 메시지만 라우팅해주긴
+     * 하지만, 방어적으로 한 번 더 확인한다.
+     */
+    @org.springframework.beans.factory.annotation.Value("${wendy.bot-names:스케쥴리,스케쥴리 개발용}")
+    private String botNamesConfig;
+
+    /**
+     * utterance가 우리 봇 이름 중 하나로 멘션된 게 맞으면, 그 멘션을 뗀 나머지 텍스트를 반환.
+     * 우리 봇 멘션이 아닌 것으로 보이면 null을 반환한다 (다른 사람 언급 등 오작동 방지).
+     */
+    private String stripBotMention(String utterance) {
+        if (utterance == null) {
+            return null;
+        }
+        String trimmedRaw = utterance.trim();
+
+        for (String rawName : botNamesConfig.split(",")) {
+            String name = rawName.trim();
+            if (name.isEmpty()) {
+                continue;
+            }
+            String prefix = "@" + name;
+            if (trimmedRaw.equals(prefix) || trimmedRaw.startsWith(prefix + " ")) {
+                String rest = trimmedRaw.substring(prefix.length());
+                return rest.replaceFirst("^\\s+", "");
+            }
+        }
+        return null; // 우리 봇 멘션이 아님 - 다른 사람/다른 봇이 언급된 메시지일 가능성
+    }
 
     /**
      * 세션 키 결정 (그룹챗이면 botGroupKey, 개인챗이면 userKey)
@@ -80,20 +115,29 @@ public class KakaoSkillController {
             return ResponseEntity.ok(kakaoWendyService.help());
         }
 
-        // 그룹챗에서는 버튼 클릭도 "@봇이름 내용" 형태로 발화가 오므로, 앞의 멘션은 떼고 매칭한다.
-        // 예: "@스케쥴리 참여할래요" → "참여할래요", "@스케쥴리"(멘션만) → ""
-        String trimmed = utterance.trim().replaceFirst("^@\\S+\\s*", "");
+        // 우리 봇("스케쥴리"/"스케쥴리 개발용") 멘션이 맞는지 확인하고, 맞으면 멘션을 뗀다.
+        // 다른 사람/다른 봇이 언급된 메시지로 보이면(=null) 아무 응답도 하지 않는다.
+        String trimmed = stripBotMention(utterance);
+        if (trimmed == null) {
+            log.warn("[Kakao Skill] 우리 봇 멘션이 아닌 것으로 보이는 메시지, 무시. utterance={}", utterance);
+            return ResponseEntity.ok(KakaoResponse.simpleText(""));
+        }
 
         // 멘션만 하고 아무 내용도 없으면 도움말을 보여준다.
         if (trimmed.isBlank()) {
             return ResponseEntity.ok(kakaoWendyService.help());
         }
 
-        // 0. 참여 등록 ("참여" 버튼 클릭 시 오는 발화. 24시간 수집 창 동안에만 의미가 있음)
+        // 0. 참여 등록 ("참여" 버튼 클릭 시 오는 발화. 6시간 수집 창 동안에만 의미가 있음)
         //    각 사용자가 버튼을 누르면 "그 사람만의" 요청이 오므로, botUserKey로 그 사람을 식별해 누적한다.
         //    버튼의 messageText가 무시되고 label("참여할래요")이 그대로 전송되는 것으로 보여, 둘 다 받아준다.
         if (trimmed.equals("참여") || trimmed.equals("참여할래요")) {
             return ResponseEntity.ok(kakaoWendyService.joinPendingSession(sessionKey, botUserKey));
+        }
+
+        // 0-1. 모집 조기 종료 ("모집 종료할게요" 버튼 클릭 시)
+        if (trimmed.equals("모집종료") || trimmed.equals("모집 종료할게요")) {
+            return ResponseEntity.ok(kakaoWendyService.closeCollectionNow(sessionKey));
         }
 
         // 1. 시작
