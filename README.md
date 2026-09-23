@@ -1,10 +1,14 @@
-# Scheduly
+<img width="3840" height="1115" alt="thumbnail" src="https://github.com/user-attachments/assets/b311d342-0f88-4da1-b076-6df7562e6296" />
 
-카카오톡 단체채팅방에서 `@스케쥴리`를 멘션하는 것만으로 일정을 자동으로 조율해주는 카카오톡 챗봇입니다.
 
-"언제 만날지" 정하는 것부터 "몇 시에 만날지" 정하는 것까지, 참여자 모으기 → 날짜 투표 → 시간 투표 → 확정까지의 전 과정을 자동화합니다.
+
+<img width="1920" height="1080" alt="Service Goal" src="https://github.com/user-attachments/assets/c3a3b9f0-fe11-494a-979b-5fdc8ead9127" />
+<img width="1920" height="905" alt="Core Value" src="https://github.com/user-attachments/assets/61b67559-c1d3-421a-a045-344b95e01cd6" />
+
 
 ## ✨ 주요 기능
+
+카카오톡 단체채팅방에서 `@스케쥴리`를 멘션하는 것만으로 일정을 자동으로 조율해주는 카카오톡 챗봇입니다. "언제 만날지" 정하는 것부터 "몇 시에 만날지" 정하는 것까지, 참여자 모으기 → 날짜 투표 → 시간 투표 → 확정까지의 전 과정을 자동화합니다.
 
 - **참여자 수집**: "@스케쥴리 시작"으로 일정 조율을 시작하면, 24시간 동안 "참여" 버튼을 누른 사람만 참여자로 등록
 - **날짜 투표**: 모인 참여자들에게 날짜별 투표 링크 공유, 우선순위 기반으로 순위 집계
