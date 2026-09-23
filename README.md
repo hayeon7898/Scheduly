@@ -1,34 +1,48 @@
-<img width="3840" height="1115" alt="thumbnail" src="https://github.com/user-attachments/assets/b311d342-0f88-4da1-b076-6df7562e6296" />
 
+<p>
+  <img width="3840" alt="thumbnail" src="https://github.com/user-attachments/assets/b311d342-0f88-4da1-b076-6df7562e6296" /><img width="1920" alt="Service Goal" src="https://github.com/user-attachments/assets/c3a3b9f0-fe11-494a-979b-5fdc8ead9127" /><img width="1920" alt="Core Value" src="https://github.com/user-attachments/assets/61b67559-c1d3-421a-a045-344b95e01cd6" />  
+</p>
 
-
-<img width="1920" height="1080" alt="Service Goal" src="https://github.com/user-attachments/assets/c3a3b9f0-fe11-494a-979b-5fdc8ead9127" />
-<img width="1920" height="905" alt="Core Value" src="https://github.com/user-attachments/assets/61b67559-c1d3-421a-a045-344b95e01cd6" />
-
-
-## ✨ 주요 기능
+---
+## ✨ Core Features
 
 카카오톡 단체채팅방에서 `@스케쥴리`를 멘션하는 것만으로 일정을 자동으로 조율해주는 카카오톡 챗봇입니다. "언제 만날지" 정하는 것부터 "몇 시에 만날지" 정하는 것까지, 참여자 모으기 → 날짜 투표 → 시간 투표 → 확정까지의 전 과정을 자동화합니다.
 
-- **참여자 수집**: "@스케쥴리 시작"으로 일정 조율을 시작하면, 24시간 동안 "참여" 버튼을 누른 사람만 참여자로 등록
-- **날짜 투표**: 모인 참여자들에게 날짜별 투표 링크 공유, 우선순위 기반으로 순위 집계
-- **시간 투표**: 날짜가 확정되면 이어서 구체적인 시간까지 2차 투표
-- **자동 리마인더**: 미투표자에게 시간 경과에 따라 톤이 달라지는 독촉 알림 자동 발송 (30분 → 2시간 → 6시간 → 12시간 → 최후통첩 → 자동 확정)
-- **카카오톡 그룹챗 능동 알림**: 카카오 Event API를 통해 봇이 먼저 채팅방에 현황/완료 메시지를 발송
 <div align="center">
-  <img src="./assets/scheduly_flow.png" width="500" alt="스케쥴리 사용 흐름" />
+    <img width="816" height="717.6" alt="scheduly_participant_flow" src="https://github.com/user-attachments/assets/0e59c48f-baad-4fd3-91dd-d075d62c99cb" />
 </div>
 
 
-## 🛠 기술 스택
+1. **참여자 수집**: "@스케쥴리 시작"으로 일정 조율을 시작하면, 24시간 동안 "참여" 버튼을 누른 사람만 참여자로 등록
+2. **날짜 투표**: 모인 참여자들에게 날짜별 투표 링크 공유, 우선순위 기반으로 순위 집계
+3. **시간 투표**: 날짜가 확정되면 이어서 구체적인 시간까지 2차 투표
+4. **자동 리마인더**: 미투표자에게 시간 경과에 따라 톤이 달라지는 독촉 알림 자동 발송 (30분 → 2시간 → 6시간 → 12시간 → 최후통첩)
+5. **카카오톡 그룹챗 능동 알림**: 카카오 Event API를 통해 봇이 먼저 채팅방에 현황/완료 메시지를 발송
 
-- **Backend**: Java, Spring Boot (Spring Web, Spring Data JPA, Spring Security, Spring Session)
-- **DB**: PostgreSQL
-- **Build**: Gradle
-- **배포**: AWS EC2, GitHub Actions (CI/CD)
-- **외부 연동**: 카카오 i 오픈빌더 (팀채팅 챗봇 스킬 서버), 카카오 Bot API (Event API)
+<div align="center">
+  <img src="./assets/scheduly_flow.png" width="700" alt="scheduly_flow" />
+</div>
 
-## 🗂 프로젝트 구조
+---
+## 📡 API Docs
+
+- [`/kakao` 카카오 스킬 API](./docs/api/kakao_api.md)
+- [`/votes` 투표 API](./docs/api/vote_api.md)
+- [`/participants` 참여자 API](./docs/api/participant_api.md)
+
+---
+## 🛠 Tech Stack
+
+| Type <img width=100> | Tech Stack <img width=720> |
+| --- | --- |
+| **Backend** | ![Java](https://img.shields.io/badge/Java-ED8B00?style=flat&logo=openjdk&logoColor=white) ![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=flat&logo=springboot&logoColor=white) ![Spring Web](https://img.shields.io/badge/Spring_Web-6DB33F?style=flat&logo=spring&logoColor=white) ![Spring Data JPA](https://img.shields.io/badge/Spring_Data_JPA-6DB33F?style=flat&logo=spring&logoColor=white) ![Spring Security](https://img.shields.io/badge/Spring_Security-6DB33F?style=flat&logo=springsecurity&logoColor=white) ![Spring Session](https://img.shields.io/badge/Spring_Session-6DB33F?style=flat&logo=spring&logoColor=white) |
+| **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white) |
+| **Build** | ![Gradle](https://img.shields.io/badge/Gradle-02303A?style=flat&logo=gradle&logoColor=white) |
+| **Deploy** | ![AWS EC2](https://img.shields.io/badge/AWS_EC2-FF9900?style=flat&logo=amazonec2&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat&logo=githubactions&logoColor=white) |
+| **Integration** | ![Kakao i Open Builder](https://img.shields.io/badge/Kakao_i_Open_Builder-FFCD00?style=flat&logo=kakaotalk&logoColor=black) ![Kakao Bot API](https://img.shields.io/badge/Kakao_Bot_API-FFCD00?style=flat&logo=kakaotalk&logoColor=black) |
+
+---
+## 📂 File Structure
 레이어별 역할은 다음과 같다.
 
 ```
@@ -40,15 +54,8 @@ repository/   Spring Data JPA 리포지토리
 dto/          요청/응답 DTO
 ```
 
-## 📡 API 문서
-
-- [`/kakao` 카카오 스킬 API](./docs/api/kakao_api.md)
-- [`/votes` 투표 API](./docs/api/vote_api.md)
-- [`/participants` 참여자 API](./docs/api/participant_api.md)
-
 ---
-
-## 🧩 Git 컨벤션
+## 🧩 Git Convention
 
 ### 전체 과정
 
@@ -90,9 +97,7 @@ docs: README 배포 절차 추가
 
 **예시**: `feat/#12`, `fix/#45`
 
-## 🧾 Issue 컨벤션
-
-### 이슈 제목 규칙
+### (3) Issue 컨벤션
 
 | 유형 | 예시 제목 |
 |---|---|
@@ -104,9 +109,3 @@ docs: README 배포 절차 추가
 | `[Chore]` | `[Chore] 불필요한 로그 삭제` |
 | `[Hotfix]` | `[Hotfix] 배포 환경 DB 설정 오류 수정` |
 | `[Security]` | `[Security] JWT 토큰 암호화 방식 강화` |
-
-## 📘 요약
-
-- 커밋 메시지는 `type: 내용` 형식으로 작성
-- 브랜치는 Git Flow 기반 (`main`, `develop`, `feat/*`, `hotfix/*`)
-- 이슈 제목은 `[Type] 설명` 형식으로 통일
