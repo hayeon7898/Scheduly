@@ -24,9 +24,8 @@ import java.time.LocalTime;
 /**
  * 카카오 i 오픈빌더 스킬 서버 컨트롤러
  *
- * 카카오톡 챗봇에서 발화를 받아 처리하고 응답을 반환합니다. 
- * - 개인챗: userKey 기반 세션 
- * - 그룹챗: botGroupKey 기반 세션
+ * 카카오톡 챗봇에서 발화를 받아 처리하고 응답을 반환합니다. - 개인챗: userKey 기반 세션 - 그룹챗: botGroupKey 기반
+ * 세션
  */
 @Tag(name = "Kakao Chatbot", description = "카카오 챗봇 스킬 API")
 @RestController
@@ -272,7 +271,14 @@ public class KakaoSkillController {
         }
 
         // weeks 파싱 (param 우선, 없으면 utterance로 보조)
-        String candidate = (weeksParam != null && !weeksParam.isBlank()) ? weeksParam : request.getUtterance();
+        // weeksParam은 버튼이 넘겨준 깨끗한 값이라 멘션이 안 섞여있지만,
+        // utterance로 폴백하는 경우엔 /main과 동일하게 봇 멘션 검증 + 제거를 거친다.
+        String candidate;
+        if (weeksParam != null && !weeksParam.isBlank()) {
+            candidate = weeksParam;
+        } else {
+            candidate = stripBotMention(request.getUtterance());
+        }
         Integer weeks = (candidate == null) ? null : kakaoWendyService.parseWeeks(candidate.trim());
 
         if (weeks == null || weeks < 0) {
