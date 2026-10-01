@@ -39,9 +39,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 카카오 챗봇용 웬디 서비스 Discord와 독립적으로 세션 관리 
- * - 개인챗: userKey 기반 
- * - 그룹챗: botGroupKey 기반
+ * 카카오 챗봇용 웬디 서비스 Discord와 독립적으로 세션 관리 - 개인챗: userKey 기반 - 그룹챗: botGroupKey 기반
  */
 @Service
 @Slf4j
@@ -187,7 +185,7 @@ public class KakaoWendyService {
 
     // ========== 참여자 수집 (신규 흐름) ==========
     /**
-     * 주차 선택 완료 → 날짜범위 확정 + 6시간 참여자 수집 시작
+     * 주차 선택 완료 → 날짜범위 확정 + 24시간 참여자 수집 시작
      * (기존 createVote()를 즉시 호출하는 대신, 이 메서드가 대체합니다.)
      */
     @Transactional
@@ -725,11 +723,16 @@ public class KakaoWendyService {
                 .template(KakaoResponse.Template.builder()
                         .outputs(List.of(
                                 KakaoResponse.Output.builder()
-                                        .simpleText(KakaoResponse.SimpleText.builder()
-                                                .text("음... 무슨 말인지 잘 모르겠어요 🤔\n\n"
-                                                        + "혹시 스케쥴리를 시작하고 싶으신가요?\n"
-                                                        + "@스케쥴리 시작 이라고 말해주세요!\n\n"
-                                                        + "사용법이 궁금하시면 @스케쥴리 도움말 을 확인해주세요 :D")
+                                        .textCard(KakaoResponse.BasicCard.builder()
+                                                .description("음... 무슨 말인지 잘 모르겠어요 🤔\n\n"
+                                                        + "혹시 스케쥴리를 시작하고 싶으신가요?")
+                                                .buttons(List.of(
+                                                        KakaoResponse.messageButton("시작할래요", "시작"),
+                                                        KakaoResponse.Button.builder()
+                                                                .label("도움말")
+                                                                .action("guide")
+                                                                .build()
+                                                ))
                                                 .build())
                                         .build()
                         ))
